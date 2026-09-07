@@ -189,8 +189,4 @@ The frontend will be available through the Vite development server.
 
 **Kushalta**
 
-B.Tech Computer Science & Engineering
-
----
-
 ⭐ If you find this project interesting, consider giving the repository a star!
