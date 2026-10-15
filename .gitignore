@@ -1,0 +1,11 @@
+.# Environment variables and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Python cache
+__pycache__/
+*.py[cod]

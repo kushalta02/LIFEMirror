@@ -1,149 +1,331 @@
 import { useState, useEffect, useRef } from "react";
 
 export default function Chatbox({ initialMessage, onClose }) {
+
   const [chat, setChat] = useState([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   const chatEndRef = useRef(null);
-
-  // Scroll
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chat, loading]);
-
-  // ONLY ONCE (fix double response)
   const hasSent = useRef(false);
 
-useEffect(() => {
-  if (initialMessage && !hasSent.current) {
-    hasSent.current = true;
-    sendMessage(initialMessage);
-  }
-}, []);
+  // Auto scroll
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({
+      behavior: "smooth"
+    });
+  }, [chat, loading]);
 
-  const sendMessage = async () => {
-  if (!message.trim()) return;
+  // Initial AI prompt
+  useEffect(() => {
+    if (initialMessage && !hasSent.current) {
+      hasSent.current = true;
+      sendMessage(initialMessage);
+    }
+  }, []);
 
-  const user = JSON.parse(localStorage.getItem("user"));
-  const personality = JSON.parse(localStorage.getItem("personality"));
+  // Send message
+  const sendMessage = async (customMessage) => {
 
-  const res = await fetch("http://127.0.0.1:8000/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message,
-      mood: localStorage.getItem("mood"),
-      personality: personality?.traits || [],
-      email: user.email
-    })
-  });
+    const finalMessage = customMessage || message;
 
-  const data = await res.json();
+    if (!finalMessage.trim()) return;
 
-  setChat(prev => [...prev, 
-    { role: "user", content: message },
-    { role: "assistant", content: data.reply }
-  ]);
+    const user = JSON.parse(localStorage.getItem("user"));
+    const personality =
+      JSON.parse(localStorage.getItem("personality"));
 
-  setMessage("");
-};
-  
+    // Add user message instantly
+    setChat((prev) => [
+      ...prev,
+      {
+        role: "user",
+        content: finalMessage
+      }
+    ]);
+
+    setLoading(true);
+
+    try {
+
+      const res = await fetch(
+        "http://127.0.0.1:8000/chat",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            message: finalMessage,
+            mood: localStorage.getItem("mood"),
+            personality: personality?.traits || [],
+            email: user.email
+          })
+        }
+      );
+
+      const data = await res.json();
+
+      setChat((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: data.reply
+        }
+      ]);
+
+    } catch (err) {
+
+      setChat((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "I’m having trouble connecting right now."
+        }
+      ]);
+
+    }
+
+    setLoading(false);
+    setMessage("");
+  };
+
   return (
     <div style={styles.overlay}>
+
       <div style={styles.chatbox}>
+
+        {/* Header */}
         <div style={styles.header}>
-          <span>AI Assistant</span>
-          <button onClick={onClose} style={styles.close}>
-            ✖
+
+          <div style={styles.headerLeft}>
+            <div style={styles.avatar}>
+              🌿
+            </div>
+
+            <div>
+              <h3 style={styles.aiName}>
+                LifeMirror AI
+              </h3>
+
+              <p style={styles.status}>
+                Online • Safe space to talk
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            style={styles.close}
+          >
+            ✕
           </button>
+
         </div>
 
+        {/* Messages */}
         <div style={styles.messages}>
+
           {chat.map((msg, i) => (
+
             <div
               key={i}
               style={{
-                ...styles.msg,
-                alignSelf:
-                  msg.role === "user" ? "flex-end" : "flex-start",
-                background:
-                  msg.role === "user" ? "#22c55e" : "#334155",
+                ...styles.messageRow,
+                justifyContent:
+                  msg.role === "user"
+                    ? "flex-end"
+                    : "flex-start"
               }}
             >
-              {msg.text}
+
+              <div
+                style={{
+                  ...styles.messageBubble,
+                  background:
+                    msg.role === "user"
+                      ? "linear-gradient(135deg,#38bdf8,#6366f1)"
+                      : "#ffffff",
+                  color:
+                    msg.role === "user"
+                      ? "#ffffff"
+                      : "#0f172a"
+                }}
+              >
+                {msg.content}
+              </div>
+
             </div>
+
           ))}
 
-          {loading && <p>Typing...</p>}
+          {loading && (
+            <div style={styles.typing}>
+              AI is typing...
+            </div>
+          )}
+
           <div ref={chatEndRef} />
+
         </div>
 
+        {/* Input */}
         <div style={styles.inputBox}>
+
           <input
+            style={styles.input}
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Type..."
+            onChange={(e) =>
+              setMessage(e.target.value)
+            }
+            placeholder="Share your thoughts..."
             onKeyDown={(e) =>
               e.key === "Enter" && sendMessage()
             }
           />
-          <button onClick={() => sendMessage()}>Send</button>
+
+          <button
+            style={styles.sendBtn}
+            onClick={() => sendMessage()}
+          >
+            Send
+          </button>
+
         </div>
+
       </div>
+
     </div>
   );
 }
 
 const styles = {
+
   overlay: {
     position: "fixed",
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%",
-    background: "rgba(0,0,0,0.6)",
+    inset: 0,
+    background: "rgba(15,23,42,0.45)",
+    backdropFilter: "blur(8px)",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 999
   },
+
   chatbox: {
-    width: "400px",
-    height: "500px",
-    background: "#1e293b",
-    borderRadius: "12px",
+    width: "420px",
+    height: "650px",
+    background: "#f8fafc",
+    borderRadius: "30px",
     display: "flex",
     flexDirection: "column",
-    color: "white",
+    overflow: "hidden",
+    boxShadow: "0 25px 80px rgba(0,0,0,0.2)"
   },
+
   header: {
-    padding: "10px",
-    background: "#0f172a",
+    padding: "18px",
+    background:
+      "linear-gradient(135deg,#dbeafe,#f0fdf4)",
     display: "flex",
     justifyContent: "space-between",
+    alignItems: "center",
+    borderBottom: "1px solid #e2e8f0"
   },
+
+  headerLeft: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px"
+  },
+
+  avatar: {
+    width: "50px",
+    height: "50px",
+    borderRadius: "50%",
+    background: "#ffffff",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    fontSize: "24px"
+  },
+
+  aiName: {
+    margin: 0,
+    color: "#0f172a"
+  },
+
+  status: {
+    margin: 0,
+    color: "#64748b",
+    fontSize: "13px"
+  },
+
   close: {
-    background: "none",
     border: "none",
-    color: "white",
+    background: "transparent",
+    fontSize: "20px",
     cursor: "pointer",
+    color: "#334155"
   },
+
   messages: {
     flex: 1,
-    padding: "10px",
     overflowY: "auto",
+    padding: "20px",
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: "14px"
   },
-  msg: {
-    padding: "8px",
-    borderRadius: "10px",
-    maxWidth: "70%",
+
+  messageRow: {
+    display: "flex"
   },
+
+  messageBubble: {
+    maxWidth: "75%",
+    padding: "14px 18px",
+    borderRadius: "20px",
+    lineHeight: "1.5",
+    fontSize: "15px",
+    boxShadow: "0 5px 15px rgba(0,0,0,0.05)"
+  },
+
+  typing: {
+    color: "#64748b",
+    fontSize: "14px",
+    paddingLeft: "10px"
+  },
+
   inputBox: {
     display: "flex",
-    gap: "5px",
-    padding: "10px",
+    gap: "10px",
+    padding: "16px",
+    borderTop: "1px solid #e2e8f0",
+    background: "#ffffff"
   },
+
+  input: {
+    flex: 1,
+    padding: "14px",
+    borderRadius: "14px",
+    border: "1px solid #cbd5e1",
+    outline: "none",
+    fontSize: "15px",
+    color: "#0f172a",
+    background: "#ffffff"
+  },
+
+  sendBtn: {
+    border: "none",
+    padding: "14px 20px",
+    borderRadius: "14px",
+    background:
+      "linear-gradient(135deg,#38bdf8,#6366f1)",
+    color: "white",
+    cursor: "pointer",
+    fontWeight: "600"
+  }
+
 };
