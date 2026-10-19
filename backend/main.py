@@ -1,11 +1,11 @@
 
 from datetime import datetime, timezone
 from typing import Any
-
+from services.ai_engine import analyze_journal_entry
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from textblob import TextBlob
+# from textblob import TextBlob
 
 from database import (
     client,
@@ -63,38 +63,48 @@ def get_journals(email: str) -> list[dict[str, Any]]:
             "timestamp", 1
         )
     )
+def format_mood(mood: str) -> str:
+    mood_labels = {
+        "Positive": "Positive 😊",
+        "Negative": "Negative 😔",
+        "Neutral": "Neutral 😐",
+    }
 
+    if mood not in mood_labels:
+        raise ValueError("Invalid AI mood label")
 
-def analyze_mood(text: str) -> str:
-    text = text.lower()
-    polarity = TextBlob(text).sentiment.polarity
+    return mood_labels[mood]
 
-    negative_words = [
-        "stress", "sad", "tired", "depressed",
-        "angry", "upset", "bad", "anxious",
-    ]
+# def analyze_mood(text: str) -> str:
+#     text = text.lower()
+#     polarity = TextBlob(text).sentiment.polarity
 
-    positive_words = [
-        "happy", "good", "great", "excited",
-        "calm", "relaxed",
-    ]
+#     negative_words = [
+#         "stress", "sad", "tired", "depressed",
+#         "angry", "upset", "bad", "anxious",
+#     ]
 
-    neg_count = sum(word in text for word in negative_words)
-    pos_count = sum(word in text for word in positive_words)
+#     positive_words = [
+#         "happy", "good", "great", "excited",
+#         "calm", "relaxed",
+#     ]
 
-    if neg_count > pos_count:
-        return "Negative 😔"
+#     neg_count = sum(word in text for word in negative_words)
+#     pos_count = sum(word in text for word in positive_words)
 
-    if pos_count > neg_count:
-        return "Positive 😊"
+#     if neg_count > pos_count:
+#         return "Negative 😔"
 
-    if polarity > 0.2:
-        return "Positive 😊"
+#     if pos_count > neg_count:
+#         return "Positive 😊"
 
-    if polarity < -0.2:
-        return "Negative 😔"
+#     if polarity > 0.2:
+#         return "Positive 😊"
 
-    return "Neutral 😐"
+#     if polarity < -0.2:
+#         return "Negative 😔"
+
+#     return "Neutral 😐"
 
 
 def infer_traits(email: str) -> list[str]:
@@ -203,7 +213,9 @@ async def login(data: dict):
     }
 
 
-# ---------------- ADD JOURNAL ----------------
+
+
+# ---------------- ADD JOURNAL WITH AI ANALYSIS ----------------
 @app.post("/add_journal")
 async def add_journal(data: JournalCreate):
     text = data.text.strip()
@@ -214,20 +226,58 @@ async def add_journal(data: JournalCreate):
             detail="Journal text cannot be empty",
         )
 
-    mood = analyze_mood(text)
+    # 1. Preprocess and validate the journal exactly once here.
+    from services.preprocessing import preprocess_journal
 
-    result = journal_collection.insert_one({
+    try:
+        processed = preprocess_journal(text)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    cleaned_text = processed["processed_text"]
+
+    # 2. Preserve the existing mood logic for dashboard compatibility.
+    mood = analyze_mood(cleaned_text)
+
+    # 3. Generate the detailed Groq AI analysis.
+    try:
+        analysis = analyze_journal_entry(cleaned_text, mood)
+    except Exception:
+        raise HTTPException(
+            status_code=502,
+            detail="AI journal analysis failed. Please try again.",
+        )
+
+    # 4. Save the journal and its analysis in one MongoDB document.
+    document = {
         "email": data.email,
-        "text": text,
+        "text": cleaned_text,
         "mood": mood,
+        "preprocessing": processed,
+        "ai_analysis": analysis,
         "timestamp": datetime.now(timezone.utc),
-    })
+    }
 
+    try:
+        result = journal_collection.insert_one(document)
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not save the journal to the database.",
+        )
+
+    # 5. Return the saved journal ID and AI analysis to the frontend.
     return {
-        "message": "Journal saved successfully",
+        "message": "Journal saved and analyzed successfully",
         "id": str(result.inserted_id),
         "mood": mood,
+        "preprocessing": processed,
+        "analysis": analysis,
     }
+
 
 
 # ---------------- GET ALL JOURNALS ----------------
@@ -255,20 +305,29 @@ async def update_journal(
     data: JournalUpdate,
     email: str,
 ):
-    from bson import ObjectId
+    
+# ------from services.preprocessing import preprocess_journal
 
-    if not ObjectId.is_valid(journal_id):
+    try:
+        processed = preprocess_journal(data.text)
+    except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail="Invalid journal ID",
+            detail=str(exc),
+        ) from exc
+
+    text = processed["processed_text"]
+
+    try:
+        analysis = analyze_journal_entry(
+            text,
+            preprocessed=processed,
         )
-
-    text = data.text.strip()
-
-    if not text:
+        mood = format_mood(analysis["mood"])
+    except Exception:
         raise HTTPException(
-            status_code=400,
-            detail="Journal text cannot be empty",
+            status_code=502,
+            detail="AI journal analysis failed. Please try again.",
         )
 
     result = journal_collection.update_one(
@@ -279,7 +338,9 @@ async def update_journal(
         {
             "$set": {
                 "text": text,
-                "mood": analyze_mood(text),
+                "mood": mood,
+                "preprocessing": processed,
+                "ai_analysis": analysis,
                 "updated_at": datetime.now(timezone.utc),
             }
         },
@@ -291,10 +352,8 @@ async def update_journal(
             detail="Journal not found",
         )
 
-    return {"message": "Journal updated successfully"}
-
-
-# ---------------- DELETE JOURNAL ----------------
+    return {"message": "Journal updated and analyzed successfully"}
+#---------- DELETE JOURNAL ----------------
 @app.delete("/journals/{journal_id}")
 async def delete_journal(journal_id: str, email: str):
     from bson import ObjectId

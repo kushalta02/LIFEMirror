@@ -6,7 +6,7 @@ from services.preprocessing import preprocess_journal
 from dotenv import load_dotenv
 from groq import Groq
 from pydantic import BaseModel, Field, ValidationError
-
+from typing import Literal
 load_dotenv()
 
 
@@ -18,13 +18,16 @@ class JournalEmotion(BaseModel):
     evidence: str
 
 
+
 class JournalAnalysis(BaseModel):
+    mood: Literal["Positive", "Negative", "Neutral"]
     emotions: list[JournalEmotion]
     themes: list[str]
     overall_intensity: int = Field(ge=1, le=10)
     summary: str
     supportive_response: str
     suggested_action: str
+
 
 
 # ---------- Groq client ----------
@@ -40,9 +43,20 @@ def get_groq_client():
 
 # ---------- Journal intelligence ----------
 
-def analyze_journal_entry(text: str, mood: str = "unknown") -> dict:
-    processed = preprocess_journal(text)
+
+def analyze_journal_entry(
+    text: str,
+    mood: str = "unknown",
+    *,
+    preprocessed: dict | None = None,
+) -> dict:
+    processed = (
+        preprocessed
+        if preprocessed is not None
+        else preprocess_journal(text)
+    )
     text = processed["processed_text"]
+
 
     client = get_groq_client()
 
@@ -81,6 +95,10 @@ Rules:
 - Treat the supplied mood as user-provided context, not proof.
 - Be empathetic, non-judgmental, and concise.
 - Return JSON only, without Markdown fences.
+
+"
+  or balanced; do not force a positive classification.
+- The mood must reflect the journal as a whole, not just one emotion.
 """
         },
         {
