@@ -2,7 +2,7 @@
 import json
 import os
 import re
-
+from services.preprocessing import preprocess_journal
 from dotenv import load_dotenv
 from groq import Groq
 from pydantic import BaseModel, Field, ValidationError
