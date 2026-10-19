@@ -1,145 +1,365 @@
 
-from fastapi import FastAPI
+from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo import MongoClient
-from textblob import TextBlob
-from datetime import datetime
 from pydantic import BaseModel
+from textblob import TextBlob
+
+from database import (
+    client,
+    db,
+    users_collection,
+    journal_collection,
+    personality_collection,
+    insights_collection,
+)
+
 from services.ai_service_chat import generate_response
 
-app = FastAPI()
+
+app = FastAPI(title="LifeMirror API")
+
 
 # ---------------- CORS ----------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # for dev only, restrict in prod
-    allow_credentials=True,
+    allow_origins=["*"],  # Restrict to frontend URL in production
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---------------- DATABASE ----------------
-client = MongoClient("mongodb://localhost:27017/")
-db = client["lifemirror"]
-
-users_collection = db["users"]
-journal_collection = db["journals"]
-personality_collection = db["personality"]
 
 # ---------------- MODELS ----------------
 class Personality(BaseModel):
     email: str
     mood: str
-    traits: list
+    traits: list[str]
     avatar: str
 
-# ---------------- SIGNUP ----------------
-@app.post("/signup")
-async def signup(data: dict):
-    if users_collection.find_one({"email": data["email"]}):
-        return {"message": "User already exists"}
 
-    users_collection.insert_one(data)
-    return {"message": "Signup successful"}
+class JournalCreate(BaseModel):
+    email: str
+    text: str
 
-# ---------------- LOGIN ----------------
-@app.post("/login")
-async def login(data: dict):
-    user = users_collection.find_one({"email": data["email"]})
 
-    if not user or user["password"] != data["password"]:
-        return {"message": "Invalid credentials"}
+class JournalUpdate(BaseModel):
+    text: str
 
-    return {
-        "user": {
-            "email": user["email"],
-            "name": user["name"]
-        }
-    }
 
-# ---------------- ADD JOURNAL ----------------
-@app.post("/add_journal")
-async def add_journal(data: dict):
-    text = data["text"].lower()
-    email = data["email"]
+class ChatRequest(BaseModel):
+    message: str
+    mood: str = "neutral"
+    email: str = "guest"
 
-    analysis = TextBlob(text)
-    polarity = analysis.sentiment.polarity
 
-    # Important keywords
-    negative_words = ["stress", "sad", "tired", "depressed", "angry", "upset", "bad", "anxious"]
-    positive_words = ["happy", "good", "great", "excited", "calm", "relaxed"]
+# ---------------- HELPERS ----------------
+def get_journals(email: str) -> list[dict[str, Any]]:
+    """Return a user's journals in chronological order."""
+    return list(
+        journal_collection.find({"email": email}).sort(
+            "timestamp", 1
+        )
+    )
+
+
+def analyze_mood(text: str) -> str:
+    text = text.lower()
+    polarity = TextBlob(text).sentiment.polarity
+
+    negative_words = [
+        "stress", "sad", "tired", "depressed",
+        "angry", "upset", "bad", "anxious",
+    ]
+
+    positive_words = [
+        "happy", "good", "great", "excited",
+        "calm", "relaxed",
+    ]
 
     neg_count = sum(word in text for word in negative_words)
     pos_count = sum(word in text for word in positive_words)
 
-    # Determine mood
     if neg_count > pos_count:
-        mood = "Negative 😔"
-    elif pos_count > neg_count:
-        mood = "Positive 😊"
-    else:
-        if polarity > 0.2:
-            mood = "Positive 😊"
-        elif polarity < -0.2:
-            mood = "Negative 😔"
-        else:
-            mood = "Neutral 😐"
+        return "Negative 😔"
 
-    # Store journal
-    journal_collection.insert_one({
+    if pos_count > neg_count:
+        return "Positive 😊"
+
+    if polarity > 0.2:
+        return "Positive 😊"
+
+    if polarity < -0.2:
+        return "Negative 😔"
+
+    return "Neutral 😐"
+
+
+def infer_traits(email: str) -> list[str]:
+    journals = get_journals(email)
+    text = " ".join(
+        entry.get("text", "") for entry in journals
+    ).lower()
+
+    traits = []
+
+    if "alone" in text:
+        traits.append("Introvert")
+
+    if "friends" in text or "party" in text:
+        traits.append("Extrovert")
+
+    if "stress" in text or "anxious" in text:
+        traits.append("Sensitive")
+
+    if "thinking" in text or "reflect" in text:
+        traits.append("Reflective")
+
+    if "happy" in text or "good" in text:
+        traits.append("Positive thinker")
+
+    return traits
+
+
+# ---------------- ROOT / HEALTH ----------------
+@app.get("/")
+async def root():
+    return {"message": "LifeMirror API is running"}
+
+
+@app.get("/health")
+async def health():
+    try:
+        client.admin.command("ping")
+        return {
+            "status": "healthy",
+            "database": "connected",
+        }
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection unavailable",
+        )
+
+
+# ---------------- SIGNUP ----------------
+@app.post("/signup")
+async def signup(data: dict):
+    email = data.get("email")
+    password = data.get("password")
+    name = data.get("name")
+
+    if not email or not password or not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Name, email and password are required",
+        )
+
+    if users_collection.find_one({"email": email}):
+        raise HTTPException(
+            status_code=409,
+            detail="User already exists",
+        )
+
+    users_collection.insert_one({
+        **data,
         "email": email,
-        "text": text,
-        "mood": mood,
-        "timestamp": datetime.now()
+        "name": name,
+        "created_at": datetime.now(timezone.utc),
     })
 
-    return {"mood": mood}
+    return {"message": "Signup successful"}
+
+
+# ---------------- LOGIN ----------------
+@app.post("/login")
+async def login(data: dict):
+    email = data.get("email")
+    password = data.get("password")
+
+    if not email or not password:
+        raise HTTPException(
+            status_code=400,
+            detail="Email and password are required",
+        )
+
+    user = users_collection.find_one({"email": email})
+
+    # Compatible with your current plain-text password records.
+    # Replace with password hashing before production use.
+    if not user or user.get("password") != password:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials",
+        )
+
+    return {
+        "user": {
+            "email": user["email"],
+            "name": user.get("name", ""),
+        }
+    }
+
+
+# ---------------- ADD JOURNAL ----------------
+@app.post("/add_journal")
+async def add_journal(data: JournalCreate):
+    text = data.text.strip()
+
+    if not text:
+        raise HTTPException(
+            status_code=400,
+            detail="Journal text cannot be empty",
+        )
+
+    mood = analyze_mood(text)
+
+    result = journal_collection.insert_one({
+        "email": data.email,
+        "text": text,
+        "mood": mood,
+        "timestamp": datetime.now(timezone.utc),
+    })
+
+    return {
+        "message": "Journal saved successfully",
+        "id": str(result.inserted_id),
+        "mood": mood,
+    }
+
+
+# ---------------- GET ALL JOURNALS ----------------
+@app.get("/journals/{email}")
+async def get_all_journals(email: str):
+    entries = get_journals(email)
+
+    return {
+        "journals": [
+            {
+                "id": str(entry["_id"]),
+                "text": entry.get("text", ""),
+                "mood": entry.get("mood", "Neutral 😐"),
+                "timestamp": entry.get("timestamp"),
+            }
+            for entry in reversed(entries)
+        ]
+    }
+
+
+# ---------------- UPDATE JOURNAL ----------------
+@app.put("/journals/{journal_id}")
+async def update_journal(
+    journal_id: str,
+    data: JournalUpdate,
+    email: str,
+):
+    from bson import ObjectId
+
+    if not ObjectId.is_valid(journal_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid journal ID",
+        )
+
+    text = data.text.strip()
+
+    if not text:
+        raise HTTPException(
+            status_code=400,
+            detail="Journal text cannot be empty",
+        )
+
+    result = journal_collection.update_one(
+        {
+            "_id": ObjectId(journal_id),
+            "email": email,
+        },
+        {
+            "$set": {
+                "text": text,
+                "mood": analyze_mood(text),
+                "updated_at": datetime.now(timezone.utc),
+            }
+        },
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Journal not found",
+        )
+
+    return {"message": "Journal updated successfully"}
+
+
+# ---------------- DELETE JOURNAL ----------------
+@app.delete("/journals/{journal_id}")
+async def delete_journal(journal_id: str, email: str):
+    from bson import ObjectId
+
+    if not ObjectId.is_valid(journal_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid journal ID",
+        )
+
+    result = journal_collection.delete_one({
+        "_id": ObjectId(journal_id),
+        "email": email,
+    })
+
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Journal not found",
+        )
+
+    return {"message": "Journal deleted successfully"}
+
 
 # ---------------- SAVE PERSONALITY ----------------
 @app.post("/save_personality")
 async def save_personality(data: Personality):
     personality_collection.update_one(
         {"email": data.email},
-        {"$set": {
-            "email": data.email,
-            "mood": data.mood,
-            "traits": data.traits,
-            "avatar": data.avatar
-        }},
-        upsert=True
+        {
+            "$set": {
+                "email": data.email,
+                "mood": data.mood,
+                "traits": data.traits,
+                "avatar": data.avatar,
+                "updated_at": datetime.now(timezone.utc),
+            }
+        },
+        upsert=True,
     )
-    return {"message": "Personality saved"}
+
+    return {"message": "Personality saved successfully"}
+
 
 # ---------------- GET PERSONALITY ----------------
 @app.get("/get_personality/{email}")
 async def get_personality(email: str):
-    user = personality_collection.find_one({"email": email}, {"_id": 0})
+    user = personality_collection.find_one(
+        {"email": email},
+        {"_id": 0},
+    )
+
     return user if user else {}
-# ---------------- AI TRAITS FROM JOURNAL ----------------
+
+
+# ---------------- AI TRAITS ----------------
 @app.get("/get_ai_traits/{email}")
-def get_ai_traits(email: str):
-    journals = list(journal_collection.find({"email": email}))
-    text = " ".join([j["text"] for j in journals]).lower()
-    traits = []
+async def get_ai_traits(email: str):
+    return {"traits": infer_traits(email)}
 
-    if "alone" in text:
-        traits.append("Introvert")
-    if "friends" in text or "party" in text:
-        traits.append("Extrovert")
-    if "stress" in text or "anxious" in text:
-        traits.append("Sensitive")
-    if "thinking" in text or "reflect" in text:
-        traits.append("Reflective")
-    if "happy" in text or "good" in text:
-        traits.append("Positive thinker")
-
-    return {"traits": traits}
 
 # ---------------- DASHBOARD ----------------
 @app.get("/dashboard/{email}")
 async def get_dashboard(email: str):
-    entries = list(journal_collection.find({"email": email}))
+    entries = get_journals(email)
 
     if not entries:
         return {
@@ -148,22 +368,24 @@ async def get_dashboard(email: str):
             "prediction": "Write journals",
             "productivity": "No data",
             "history": [],
-            "traits": []
+            "traits": [],
         }
 
-    # Latest mood
-    moods = [e["mood"] for e in entries]
-    latest = moods[-1]
+    latest = entries[-1].get("mood", "Neutral 😐")
 
-    # Mood trend numbers
-    mood_map = {"Negative 😔": -1, "Neutral 😐": 0, "Positive 😊": 1}
-    trend = [mood_map.get(m, 0) for m in moods]
+    mood_map = {
+        "Negative 😔": -1,
+        "Neutral 😐": 0,
+        "Positive 😊": 1,
+    }
 
-    # 🔥 AI-inferred traits
-    traits_data = get_ai_traits(email)
-    traits = list(set(traits_data["traits"]))  # remove duplicates
+    history = [
+        mood_map.get(entry.get("mood"), 0)
+        for entry in entries
+    ]
 
-    # 🔥 IMPROVED PERSONALITY LOGIC
+    traits = infer_traits(email)
+
     if "Introvert" in traits and "Extrovert" not in traits:
         personality = "Introvert"
     elif "Extrovert" in traits and "Introvert" not in traits:
@@ -173,7 +395,6 @@ async def get_dashboard(email: str):
     else:
         personality = "Neutral"
 
-    # 🔥 SMART PREDICTION
     if latest == "Positive 😊":
         prediction = "You're doing great, keep it up ✨"
     elif latest == "Negative 😔":
@@ -186,79 +407,117 @@ async def get_dashboard(email: str):
         "personality": personality,
         "prediction": prediction,
         "productivity": f"{len(entries)} entries",
-        "history": trend,
-        "traits": traits
+        "history": history,
+        "traits": traits,
     }
+
+
 # ---------------- CHAT ----------------
-chat_memory = {}
+chat_memory: dict[str, list[dict[str, str]]] = {}
+
 
 @app.post("/chat")
-async def chat(data: dict):
-    message = data.get("message", "")
-    mood = data.get("mood", "neutral")
-    email = data.get("email", "guest")
+async def chat(data: ChatRequest):
+    message = data.message.strip()
+
+    if not message:
+        raise HTTPException(
+            status_code=400,
+            detail="Message cannot be empty",
+        )
+
+    history = chat_memory.get(data.email, [])
 
     try:
-        # get previous history
-        history = chat_memory.get(email, [])
+        reply = generate_response(
+            message,
+            data.mood,
+            history,
+        )
 
-        # generate AI reply
-        reply = generate_response(message, mood, history)
+        updated_history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": reply},
+        ]
 
-        # update memory
-        history.append({"role": "user", "content": message})
-        history.append({"role": "assistant", "content": reply})
-
-        chat_memory[email] = history[-6:]  # keep last few messages
+        chat_memory[data.email] = updated_history[-6:]
 
         return {"reply": reply}
 
-    except Exception as e:
-        print("ERROR:", repr(e))
-        return {"reply": str(e)}
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="AI assistant is temporarily unavailable",
+        )
+
+
+# ---------------- RECOMMENDATIONS ----------------
 @app.get("/recommendations/{email}")
-def get_recommendations(email: str):
-    entries = list(journal_collection.find({"email": email}))
-    
+async def get_recommendations(email: str):
+    entries = get_journals(email)
+
     if not entries:
-        return {"recommendations": ["Start writing journals ✍️"]}
+        return {
+            "recommendations": ["Start writing journals ✍️"]
+        }
 
-    latest_mood = entries[-1]["mood"]
-
-    traits_data = get_ai_traits(email)
-    traits = traits_data["traits"]
+    latest_mood = entries[-1].get("mood", "Neutral 😐")
+    traits = infer_traits(email)
 
     recommendations = []
 
-    # 🔥 Mood-based
     if latest_mood == "Negative 😔":
-        recommendations += [
+        recommendations.extend([
             "Listen to calm music 🎵",
             "Try meditation 🧘",
-            "Write your thoughts ✍️"
-        ]
-
+            "Write your thoughts ✍️",
+        ])
     elif latest_mood == "Positive 😊":
-        recommendations += [
+        recommendations.extend([
             "Keep the energy high 💪",
             "Try something creative 🎨",
-            "Share your happiness 😊"
-        ]
-
+            "Share your happiness 😊",
+        ])
     else:
-        recommendations += [
+        recommendations.extend([
             "Stay balanced ⚖️",
-            "Go for a walk 🚶"
-        ]
+            "Go for a walk 🚶",
+        ])
 
-    # 🔥 Personality-based
     if "Introvert" in traits:
-        recommendations.append("Spend some peaceful alone time 🌿")
+        recommendations.append(
+            "Spend some peaceful alone time 🌿"
+        )
 
     if "Extrovert" in traits:
-        recommendations.append("Talk to friends or socialize 🗣️")
+        recommendations.append(
+            "Talk to friends or socialize 🗣️"
+        )
 
     if "Sensitive" in traits:
-        recommendations.append("Listen to relaxing music 🎶")
+        recommendations.append(
+            "Listen to relaxing music 🎶"
+        )
 
-    return {"recommendations": list(set(recommendations))}
+    return {
+        "recommendations": list(dict.fromkeys(recommendations))
+    }
+
+
+# ---------------- DELETE PERSONALITY ----------------
+@app.delete("/delete_personality/{email}")
+async def delete_personality(email: str):
+    result = personality_collection.delete_one(
+        {"email": email}
+    )
+
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Personality record not found",
+        )
+
+    return {"message": "Personality deleted successfully"}
+@app.route("/logout")
+async def logout():
+    return {"message": "Logout successful"}
