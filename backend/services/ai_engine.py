@@ -41,10 +41,8 @@ def get_groq_client():
 # ---------- Journal intelligence ----------
 
 def analyze_journal_entry(text: str, mood: str = "unknown") -> dict:
-    text = text.strip()
-
-    if not text:
-        raise ValueError("Journal text cannot be empty.")
+    processed = preprocess_journal(text)
+    text = processed["processed_text"]
 
     client = get_groq_client()
 
