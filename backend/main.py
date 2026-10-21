@@ -1,10 +1,18 @@
+import os
+import jwt
 
+from datetime import datetime, timezone, timedelta
+from pwdlib import PasswordHash
+from fastapi import Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timezone
 from typing import Any
 from services.ai_engine import analyze_journal_entry
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from services.preprocessing import preprocess_journal
+from bson import ObjectId
 # from textblob import TextBlob
 
 from database import (
@@ -21,7 +29,96 @@ from services.ai_service_chat import generate_response
 
 app = FastAPI(title="LifeMirror API")
 
+# ---------------- AUTHENTICATION HELPERS ----------------
 
+password_hash = PasswordHash.recommended()
+security = HTTPBearer()
+
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+
+if not JWT_SECRET_KEY:
+    raise RuntimeError("JWT_SECRET_KEY is missing from .env")
+
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRE_MINUTES = 60
+
+
+def hash_password(password: str) -> str:
+    """Securely hash a password using Argon2."""
+    return password_hash.hash(password)
+
+
+def verify_password(password: str, stored_password: str) -> bool:
+    """Verify both modern hashes and existing plaintext passwords."""
+    if not stored_password:
+        return False
+
+    # Modern Argon2 password hash.
+    if stored_password.startswith("$argon2"):
+        return password_hash.verify(password, stored_password)
+
+    # Legacy plaintext password: temporary migration support.
+    return password == stored_password
+
+
+def create_access_token(email: str) -> str:
+    """Create a signed JWT for the authenticated user."""
+    now = datetime.now(timezone.utc)
+
+    payload = {
+        "sub": email,
+        "iat": now,
+        "exp": now + timedelta(minutes=JWT_EXPIRE_MINUTES),
+    }
+
+    return jwt.encode(
+        payload,
+        JWT_SECRET_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> dict:
+    """Validate a Bearer token and return its user."""
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+        )
+        email = payload.get("sub")
+
+        if not email:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid authentication token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+    user = users_collection.find_one({"email": email})
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="User no longer exists",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return {
+        "email": user["email"],
+        "name": user.get("name", ""),
+    }
 # ---------------- CORS ----------------
 app.add_middleware(
     CORSMiddleware,
@@ -215,67 +312,59 @@ async def login(data: dict):
 
 
 
-# ---------------- ADD JOURNAL WITH AI ANALYSIS ----------------
+# add journal
+
 @app.post("/add_journal")
 async def add_journal(data: JournalCreate):
-    text = data.text.strip()
-
-    if not text:
-        raise HTTPException(
-            status_code=400,
-            detail="Journal text cannot be empty",
-        )
-
-    # 1. Preprocess and validate the journal exactly once here.
-    from services.preprocessing import preprocess_journal
-
+    # 1. Validate and preprocess the user's journal.
     try:
-        processed = preprocess_journal(text)
+        processed = preprocess_journal(data.text)
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc),
         ) from exc
 
-    cleaned_text = processed["processed_text"]
-
-    # 2. Preserve the existing mood logic for dashboard compatibility.
-    mood = analyze_mood(cleaned_text)
-
-    # 3. Generate the detailed Groq AI analysis.
+    # 2. Run the AI analysis on the processed text.
     try:
-        analysis = analyze_journal_entry(cleaned_text, mood)
-    except Exception:
+        analysis = analyze_journal_entry(
+            data.text,
+            preprocessed=processed,
+        )
+    except (RuntimeError, ValueError) as exc:
+        # Keep internal provider details out of the API response.
         raise HTTPException(
             status_code=502,
-            detail="AI journal analysis failed. Please try again.",
-        )
+            detail="Journal analysis failed. Please try again.",
+        ) from exc
 
-    # 4. Save the journal and its analysis in one MongoDB document.
-    document = {
+    # 3. Use the AI-classified mood, not the old keyword classifier.
+    mood = format_mood(analysis["mood"])
+
+    # 4. Prepare the MongoDB document.
+    journal_document = {
         "email": data.email,
-        "text": cleaned_text,
+        "text": data.text,
         "mood": mood,
-        "preprocessing": processed,
+        "preprocessing": {
+            "processed_text": processed["processed_text"],
+            "character_count": processed["character_count"],
+            "word_count": processed["word_count"],
+        },
         "ai_analysis": analysis,
         "timestamp": datetime.now(timezone.utc),
     }
 
-    try:
-        result = journal_collection.insert_one(document)
-    except Exception:
-        raise HTTPException(
-            status_code=503,
-            detail="Could not save the journal to the database.",
-        )
+    # 5. Save the journal and its analysis together.
+    result = journal_collection.insert_one(journal_document)
 
-    # 5. Return the saved journal ID and AI analysis to the frontend.
+    # 6. Return the result to the React frontend.
     return {
         "message": "Journal saved and analyzed successfully",
         "id": str(result.inserted_id),
         "mood": mood,
-        "preprocessing": processed,
         "analysis": analysis,
+        "preprocessing": journal_document["preprocessing"],
     }
 
 
@@ -292,10 +381,13 @@ async def get_all_journals(email: str):
                 "text": entry.get("text", ""),
                 "mood": entry.get("mood", "Neutral 😐"),
                 "timestamp": entry.get("timestamp"),
+                "ai_analysis": entry.get("ai_analysis", {}),
+
             }
             for entry in reversed(entries)
         ]
     }
+
 
 
 # ---------------- UPDATE JOURNAL ----------------
@@ -305,9 +397,14 @@ async def update_journal(
     data: JournalUpdate,
     email: str,
 ):
-    
-# ------from services.preprocessing import preprocess_journal
+    # 1. Validate the journal ID first.
+    if not ObjectId.is_valid(journal_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid journal ID",
+        )
 
+    # 2. Preprocess the edited journal.
     try:
         processed = preprocess_journal(data.text)
     except ValueError as exc:
@@ -316,20 +413,20 @@ async def update_journal(
             detail=str(exc),
         ) from exc
 
-    text = processed["processed_text"]
-
+    # 3. Re-analyze the edited text.
     try:
         analysis = analyze_journal_entry(
-            text,
+            data.text,
             preprocessed=processed,
         )
         mood = format_mood(analysis["mood"])
-    except Exception:
+    except (RuntimeError, ValueError) as exc:
         raise HTTPException(
             status_code=502,
             detail="AI journal analysis failed. Please try again.",
-        )
+        ) from exc
 
+    # 4. Update the existing document, not insert a new one.
     result = journal_collection.update_one(
         {
             "_id": ObjectId(journal_id),
@@ -337,9 +434,13 @@ async def update_journal(
         },
         {
             "$set": {
-                "text": text,
+                "text": data.text,
                 "mood": mood,
-                "preprocessing": processed,
+                "preprocessing": {
+                    "processed_text": processed["processed_text"],
+                    "character_count": processed["character_count"],
+                    "word_count": processed["word_count"],
+                },
                 "ai_analysis": analysis,
                 "updated_at": datetime.now(timezone.utc),
             }
@@ -349,53 +450,45 @@ async def update_journal(
     if result.matched_count == 0:
         raise HTTPException(
             status_code=404,
-            detail="Journal not found",
+            detail="Journal not found for this user",
         )
 
-    return {"message": "Journal updated and analyzed successfully"}
-#---------- DELETE JOURNAL ----------------
-@app.delete("/journals/{journal_id}")
-async def delete_journal(journal_id: str, email: str):
-    from bson import ObjectId
+    return {
+        "message": "Journal updated and analyzed successfully",
+        "id": journal_id,
+        "mood": mood,
+        "analysis": analysis,
+    }
 
+# ---------------- DELETE JOURNAL ----------------
+@app.delete("/journals/{journal_id}")
+async def delete_journal(
+    journal_id: str,
+    email: str,
+):
     if not ObjectId.is_valid(journal_id):
         raise HTTPException(
             status_code=400,
             detail="Invalid journal ID",
         )
 
-    result = journal_collection.delete_one({
-        "_id": ObjectId(journal_id),
-        "email": email,
-    })
+    result = journal_collection.delete_one(
+        {
+            "_id": ObjectId(journal_id),
+            "email": email,
+        }
+    )
 
     if result.deleted_count == 0:
         raise HTTPException(
             status_code=404,
-            detail="Journal not found",
+            detail="Journal not found for this user",
         )
 
-    return {"message": "Journal deleted successfully"}
-
-
-# ---------------- SAVE PERSONALITY ----------------
-@app.post("/save_personality")
-async def save_personality(data: Personality):
-    personality_collection.update_one(
-        {"email": data.email},
-        {
-            "$set": {
-                "email": data.email,
-                "mood": data.mood,
-                "traits": data.traits,
-                "avatar": data.avatar,
-                "updated_at": datetime.now(timezone.utc),
-            }
-        },
-        upsert=True,
-    )
-
-    return {"message": "Personality saved successfully"}
+    return {
+        "message": "Journal deleted successfully",
+        "id": journal_id,
+    }
 
 
 # ---------------- GET PERSONALITY ----------------

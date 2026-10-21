@@ -49,3 +49,7 @@ def preprocess_journal(text: str) -> dict:
         "character_count": len(cleaned_text),
         "word_count": len(words),
     }
+# print(preprocess_journal("This is a test journal entry. It includes punctuation, " \
+# "negation, and various characters! Let's see how it handles them.")
+# )
+# print(preprocess_journal("i feel stressed today"))
