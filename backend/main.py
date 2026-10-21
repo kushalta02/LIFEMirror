@@ -172,37 +172,6 @@ def format_mood(mood: str) -> str:
 
     return mood_labels[mood]
 
-# def analyze_mood(text: str) -> str:
-#     text = text.lower()
-#     polarity = TextBlob(text).sentiment.polarity
-
-#     negative_words = [
-#         "stress", "sad", "tired", "depressed",
-#         "angry", "upset", "bad", "anxious",
-#     ]
-
-#     positive_words = [
-#         "happy", "good", "great", "excited",
-#         "calm", "relaxed",
-#     ]
-
-#     neg_count = sum(word in text for word in negative_words)
-#     pos_count = sum(word in text for word in positive_words)
-
-#     if neg_count > pos_count:
-#         return "Negative 😔"
-
-#     if pos_count > neg_count:
-#         return "Positive 😊"
-
-#     if polarity > 0.2:
-#         return "Positive 😊"
-
-#     if polarity < -0.2:
-#         return "Negative 😔"
-
-#     return "Neutral 😐"
-
 
 def infer_traits(email: str) -> list[str]:
     journals = get_journals(email)
@@ -254,14 +223,26 @@ async def health():
 # ---------------- SIGNUP ----------------
 @app.post("/signup")
 async def signup(data: dict):
+    name = data.get("name")
     email = data.get("email")
     password = data.get("password")
-    name = data.get("name")
 
-    if not email or not password or not name:
+    if not all(
+        isinstance(value, str) and value.strip()
+        for value in (name, email, password)
+    ):
         raise HTTPException(
             status_code=400,
             detail="Name, email and password are required",
+        )
+
+    name = name.strip()
+    email = email.strip().lower()
+
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters long",
         )
 
     if users_collection.find_one({"email": email}):
@@ -271,9 +252,9 @@ async def signup(data: dict):
         )
 
     users_collection.insert_one({
-        **data,
-        "email": email,
         "name": name,
+        "email": email,
+        "password": hash_password(password),
         "created_at": datetime.now(timezone.utc),
     })
 
@@ -286,6 +267,14 @@ async def login(data: dict):
     email = data.get("email")
     password = data.get("password")
 
+    if not isinstance(email, str) or not isinstance(password, str):
+        raise HTTPException(
+            status_code=400,
+            detail="Email and password are required",
+        )
+
+    email = email.strip().lower()
+
     if not email or not password:
         raise HTTPException(
             status_code=400,
@@ -294,21 +283,35 @@ async def login(data: dict):
 
     user = users_collection.find_one({"email": email})
 
-    # Compatible with your current plain-text password records.
-    # Replace with password hashing before production use.
-    if not user or user.get("password") != password:
+    if not user or not verify_password(
+        password,
+        user.get("password", ""),
+    ):
         raise HTTPException(
             status_code=401,
             detail="Invalid credentials",
         )
 
+    # Upgrade a legacy plaintext password after successful verification.
+    stored_password = user.get("password", "")
+
+    if not stored_password.startswith("$argon2"):
+        users_collection.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"password": hash_password(password)}},
+        )
+
+    token = create_access_token(user["email"])
+
     return {
+        "message": "Login successful",
+        "access_token": token,
+        "token_type": "bearer",
         "user": {
             "email": user["email"],
             "name": user.get("name", ""),
-        }
+        },
     }
-
 
 
 
@@ -510,8 +513,17 @@ async def get_ai_traits(email: str):
 
 # ---------------- DASHBOARD ----------------
 @app.get("/dashboard/{email}")
-async def get_dashboard(email: str):
-    entries = get_journals(email)
+async def get_dashboard(
+    email: str,
+    current_user: dict = Depends(get_current_user),
+):
+    if email.strip().lower() != current_user["email"].lower():
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot access another user's dashboard",
+        )
+
+    entries = get_journals(current_user["email"])
 
     if not entries:
         return {
