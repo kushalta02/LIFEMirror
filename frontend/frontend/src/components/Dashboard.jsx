@@ -1,6 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useSessionTimeout } from "src/utils.js";
+import { useSessionTimeout, logout } from "../utils";
 
 const demoHistory = [
   { day: "Mon", mood: -0.45 }, { day: "Tue", mood: -0.12 },

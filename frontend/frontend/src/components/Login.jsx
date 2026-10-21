@@ -280,7 +280,7 @@ export default function Login() {
 
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok || !data.user) {
+      if (!response.ok || !data.user || !data.access_token) {
         setError(
           data.message ||
             data.error ||
@@ -289,7 +289,9 @@ export default function Login() {
         return;
       }
 
+      localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("session_started_at", Date.now().toString());
       navigate("/dashboard", { replace: true });
     } catch {
       setError("Can't reach the server. Please check that your backend is running.");
