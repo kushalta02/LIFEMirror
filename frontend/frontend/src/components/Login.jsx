@@ -292,6 +292,10 @@ export default function Login() {
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("user", JSON.stringify(data.user));
       localStorage.setItem("session_started_at", Date.now().toString());
+      if (!data.access_token) {
+        throw new Error("Login response did not include an access token.");}
+
+      sessionStorage.setItem("access_token", data.access_token);
       navigate("/dashboard", { replace: true });
     } catch {
       setError("Can't reach the server. Please check that your backend is running.");

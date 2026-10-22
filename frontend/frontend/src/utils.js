@@ -1,61 +1,63 @@
-
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 export const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 minutes
 
 export function logout() {
-  localStorage.removeItem("access_token");
+  sessionStorage.removeItem("access_token");
   localStorage.removeItem("user");
-  localStorage.removeItem("session_started_at");
   localStorage.removeItem("personality");
   localStorage.removeItem("mood");
-
-  window.location.replace("/");
+  window.dispatchEvent(new Event("lifemirror:logout"));
 }
 
 export function useSessionTimeout() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
+    let timer;
 
-    if (!token) {
-      navigate("/", { replace: true });
-      return;
-    }
-
-    let timeoutId;
-
-    const resetTimer = () => {
-      window.clearTimeout(timeoutId);
-
-      timeoutId = window.setTimeout(() => {
-        logout();
-      }, INACTIVITY_LIMIT);
+    const endSession = () => {
+      logout();
+      navigate("/", { replace: true, state: { reason: "timeout" } });
     };
 
+    const resetTimer = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(endSession, INACTIVITY_LIMIT);
+    };
+
+    // A token is required now that /dashboard is protected.
+    if (!sessionStorage.getItem("access_token")) {
+      logout();
+      navigate("/", { replace: true });
+      return undefined;
+    }
+
     const activityEvents = [
-      "mousemove",
-      "mousedown",
+      "pointerdown",
+      "pointermove",
       "keydown",
       "scroll",
       "touchstart",
       "click",
     ];
 
-    activityEvents.forEach((event) => {
-      window.addEventListener(event, resetTimer);
-    });
+    activityEvents.forEach((eventName) =>
+      window.addEventListener(eventName, resetTimer, { passive: true })
+    );
+
+    const onManualLogout = () => navigate("/", { replace: true });
+    window.addEventListener("lifemirror:logout", onManualLogout);
 
     resetTimer();
 
     return () => {
-      window.clearTimeout(timeoutId);
-
-      activityEvents.forEach((event) => {
-        window.removeEventListener(event, resetTimer);
-      });
+      window.clearTimeout(timer);
+      activityEvents.forEach((eventName) =>
+        window.removeEventListener(eventName, resetTimer)
+      );
+      window.removeEventListener("lifemirror:logout", onManualLogout);
     };
   }, [navigate]);
 }
