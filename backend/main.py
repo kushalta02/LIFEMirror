@@ -576,13 +576,18 @@ async def get_dashboard(
     }
 
 
+
 # ---------------- CHAT ----------------
+
 chat_memory: dict[str, list[dict[str, str]]] = {}
+
+MAX_CHAT_HISTORY = 12
 
 
 @app.post("/chat")
 async def chat(data: ChatRequest):
     message = data.message.strip()
+    email_key = data.email.strip().lower()
 
     if not message:
         raise HTTPException(
@@ -590,25 +595,37 @@ async def chat(data: ChatRequest):
             detail="Message cannot be empty",
         )
 
-    history = chat_memory.get(data.email, [])
+    if not email_key:
+        raise HTTPException(
+            status_code=400,
+            detail="Email is required",
+        )
+
+    # Retrieve recent conversation history
+    history = chat_memory.get(email_key, [])
 
     try:
         reply = generate_response(
-            message,
-            data.mood,
-            history,
+            message=message,
+            mood=data.mood,
+            history=history,
         )
 
+        # Save the conversation only after a successful AI response
         updated_history = history + [
             {"role": "user", "content": message},
             {"role": "assistant", "content": reply},
         ]
 
-        chat_memory[data.email] = updated_history[-6:]
+        # Keep the latest 12 messages (6 conversation exchanges)
+        chat_memory[email_key] = updated_history[-MAX_CHAT_HISTORY:]
 
         return {"reply": reply}
 
     except Exception:
+        import logging
+        logging.exception("LifeMirror chat generation failed")
+
         raise HTTPException(
             status_code=500,
             detail="AI assistant is temporarily unavailable",
