@@ -23,6 +23,7 @@ from database import (
     personality_collection,
     insights_collection,
     chat_collection,
+    conversations_collection,
 )
 
 from services.ai_service_chat import generate_response
