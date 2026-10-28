@@ -664,6 +664,45 @@ async def chat(
             detail="AI assistant is temporarily unavailable",
         )
 
+@app.get("/chat/history")
+async def get_chat_history(
+    current_user: dict = Depends(get_current_user),
+):
+    email_key = current_user["email"].strip().lower()
+
+    try:
+        saved_messages = list(
+            chat_collection.find(
+                {
+                    "email": email_key,
+                    "role": {"$in": ["user", "assistant"]},
+                }
+            )
+            .sort("_id", -1)
+            .limit(100)
+        )
+
+        saved_messages.reverse()
+
+        return {
+            "messages": [
+                {
+                    "role": item["role"],
+                    "text": item["content"],
+                }
+                for item in saved_messages
+                if isinstance(item.get("content"), str)
+            ]
+        }
+
+    except PyMongoError:
+        import logging
+        logging.exception("Could not load LifeMirror chat history")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not load chat history",
+        )
+
 
 
 # ---------------- RECOMMENDATIONS ----------------
