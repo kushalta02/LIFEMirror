@@ -283,6 +283,52 @@ const styles = `
 @media (prefers-reduced-motion: reduce) {
   .lm-chat *, .lm-chat *::before, .lm-chat *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+/* LifeMirror v3: warm, lively dashboard styling; no orbital motif. */
+.lm-chat{--mint:#80e6c0;--lav:#c2b2ff;--rose:#ffa8b8;--blue:#92d2ff;--gold:#f0d38f;background:radial-gradient(ellipse at 7% 2%,#80e6c018,transparent 30%),radial-gradient(ellipse at 96% 20%,#c2b2ff14,transparent 28%),radial-gradient(ellipse at 70% 100%,#ffa8b80a,transparent 32%),#0d1116}
+.lm-frame{background:linear-gradient(135deg,#141a20f7,#151820f7 55%,#171821f7);border-color:#dce8f00f}
+.lm-header{background:linear-gradient(90deg,#80e6c006,#c2b2ff07,#ffa8b806)}
+.lm-dashboard-return{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid #ffffff16;border-radius:11px;color:#d3dddf;background:#ffffff06;font-size:10px;font-weight:700;white-space:nowrap;transition:transform .2s,border-color .2s,background .2s}
+.lm-dashboard-return:hover{transform:translateX(-2px);border-color:#80e6c04a;background:#80e6c00d}.lm-dashboard-return span{font-size:16px;color:var(--mint)}
+.lm-welcome{min-height:455px;background:radial-gradient(ellipse at 85% 18%,#c2b2ff25,transparent 31%),radial-gradient(ellipse at 8% 100%,#80e6c01d,transparent 38%),radial-gradient(ellipse at 63% 90%,#ffa8b80d,transparent 32%),linear-gradient(125deg,#1b292c,#20212d 62%,#292333);border-color:#ffffff19;box-shadow:inset 0 1px #ffffff0b,0 18px 45px #0002}
+.lm-welcome:before{opacity:.12;background-image:radial-gradient(#fff .65px,transparent .8px);background-size:23px 23px}
+.lm-welcome h1 span{background:linear-gradient(100deg,#80e6c0 5%,#c9d9ff 47%,#ffa8b8 83%,#f0d38f);-webkit-background-clip:text;background-clip:text}
+.lm-action-primary{border-color:#80e6c0;background:linear-gradient(110deg,#a0f0d0,#80e6c0);box-shadow:0 6px 20px #80e6c018}
+.lm-action-secondary{border-color:#c2b2ff35;background:linear-gradient(110deg,#c2b2ff10,#ffa8b80b)}
+.lm-companion-art{position:absolute;width:270px;height:285px;right:2%;top:38px;margin:0;z-index:1;pointer-events:none}
+.lm-room-glow{position:absolute;inset:12px 0 18px;border-radius:50%;background:radial-gradient(ellipse,#80e6c01c 0%,#c2b2ff12 42%,#ffa8b809 62%,transparent 72%);filter:blur(9px);animation:lm-room-breathe 6s ease-in-out infinite}
+.lm-window-frame{position:absolute;top:22px;right:24px;width:151px;height:177px;overflow:hidden;border:5px solid #d9d9ef;border-radius:78px 78px 13px 13px;background:linear-gradient(180deg,#686d9c 0%,#e8a9a9 49%,#f2c992 72%,#8ac6ad 100%);box-shadow:0 0 0 1px #ffffff25,0 15px 40px #05081055,inset 0 0 20px #fff2;animation:lm-window-float 7s ease-in-out infinite}
+.lm-window-frame:before{content:"";position:absolute;z-index:3;left:50%;top:0;bottom:0;width:4px;transform:translateX(-50%);background:#e5e1ef;box-shadow:0 0 6px #fff5}
+.lm-window-frame:after{content:"";position:absolute;z-index:3;left:0;right:0;top:56%;height:4px;background:#e5e1ef;box-shadow:0 0 6px #fff5}
+.lm-window-pane{position:absolute;z-index:2;top:0;bottom:0;width:50%;background:linear-gradient(145deg,#fff2,transparent 65%)}
+.lm-sunrise{position:absolute;top:44px;left:49px;width:42px;height:42px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff5d7,#f4d58b 65%,#e9a7a5);box-shadow:0 0 25px #ffdda36b;animation:lm-sun-glow 5s ease-in-out infinite}
+.lm-window-hill{position:absolute;bottom:0;left:-20px;width:190px;height:67px;border-radius:50% 50% 0 0/45% 45% 0 0}
+.lm-window-hill.hill-back{bottom:17px;background:linear-gradient(120deg,#8aa8b2,#6a8f9d);transform:rotate(-8deg)}
+.lm-window-hill.hill-front{background:linear-gradient(120deg,#487f7b,#3b6a65);transform:rotate(7deg)}
+.lm-window-star{position:absolute;z-index:2;color:#fff1d0;text-shadow:0 0 10px #fff;animation:lm-star-twinkle 3s ease-in-out infinite}.lm-window-star.star-one{top:23px;right:29px;font-size:12px}.lm-window-star.star-two{top:57px;left:20px;font-size:16px;animation-delay:-1.5s}
+.lm-plant-pot{position:absolute;left:16px;bottom:32px;width:83px;height:115px;animation:lm-plant-sway 5s ease-in-out infinite;transform-origin:bottom center}
+.lm-plant-stem{position:absolute;bottom:32px;left:39px;width:3px;height:72px;border-radius:5px;background:linear-gradient(#a6dfb0,#528b76);transform:rotate(5deg)}
+.lm-leaf{position:absolute;z-index:2;width:32px;height:18px;border-radius:100% 0 100% 0;background:linear-gradient(145deg,#b4edbf,#4ba883);box-shadow:inset 1px 1px #fff5;transform-origin:bottom right}
+.lm-leaf.leaf-one{left:11px;top:30px;transform:rotate(24deg)}.lm-leaf.leaf-two{left:39px;top:19px;transform:rotate(-50deg) scaleX(-1);background:linear-gradient(145deg,#d1e7b1,#5c9e83)}.lm-leaf.leaf-three{left:4px;top:54px;transform:rotate(8deg) scale(.85);background:linear-gradient(145deg,#a4dcb4,#4c977f)}.lm-leaf.leaf-four{left:38px;top:48px;transform:rotate(-48deg) scaleX(-1) scale(.88)}
+.lm-pot{position:absolute;bottom:0;left:21px;width:43px;height:38px;border-radius:5px 5px 13px 13px;background:linear-gradient(90deg,#d7a0a0,#e8b6aa 45%,#bc8b91);box-shadow:inset 0 4px #f4c7ba,0 7px 12px #0003}.lm-pot:before{content:"";position:absolute;left:-3px;right:-3px;top:-4px;height:8px;border-radius:5px;background:#f0c5b9}
+.lm-art-note{position:absolute;right:0;bottom:10px;display:flex;align-items:center;gap:7px;padding:9px 11px;border:1px solid #ffffff1c;border-radius:12px;color:#d9d5ed;background:#242637d9;box-shadow:0 8px 24px #0002;font-size:8px;letter-spacing:.35px;animation:lm-note-float 5s ease-in-out infinite}.lm-art-note span:first-child{color:var(--gold);font-size:13px}
+.lm-starter{background:linear-gradient(110deg,#ffffff06,#ffffff02);border-color:#ffffff12}.lm-starter:nth-child(1) .lm-starter-icon{color:var(--mint);background:linear-gradient(145deg,#80e6c021,#80e6c00b);border-color:#80e6c020}.lm-starter:nth-child(2) .lm-starter-icon{color:var(--lav);background:linear-gradient(145deg,#c2b2ff24,#c2b2ff0b);border-color:#c2b2ff20}.lm-starter:nth-child(3) .lm-starter-icon{color:var(--rose);background:linear-gradient(145deg,#ffa8b822,#ffa8b80a);border-color:#ffa8b820}.lm-starter:nth-child(4) .lm-starter-icon{color:var(--blue);background:linear-gradient(145deg,#92d2ff22,#92d2ff0a);border-color:#92d2ff20}
+.lm-starter:hover:not(:disabled){border-color:#c2b2ff44;background:linear-gradient(110deg,#80e6c00b,#c2b2ff0c)}
+.lm-checkin{border-color:#f0d38f2b;background:radial-gradient(ellipse at 100% 0%,#f0d38f12,transparent 58%),linear-gradient(145deg,#24242b,#1b2027)}
+.lm-reminder{border-color:#ffa8b822;background:linear-gradient(125deg,#ffa8b80c,#c2b2ff0b)}
+.lm-bubble{background:linear-gradient(145deg,#202a30,#1b222b);border-color:#ffffff14}.lm-message-user .lm-bubble{background:linear-gradient(135deg,#393650,#29394a);border-color:#c2b2ff36}
+.lm-composer{background:linear-gradient(110deg,#1b262b,#20202b);border-color:#ffffff1e}.lm-composer:focus-within{border-color:#80e6c077;box-shadow:0 0 0 3px #80e6c012,0 12px 32px #0003}.lm-send{background:linear-gradient(145deg,#a0f0d0,#80e6c0)}
+.lm-side-title{letter-spacing:-.8px}.lm-side-heading i{background:linear-gradient(135deg,#c2b2ff,#ffa8b8);box-shadow:0 0 12px #c2b2ff55}
+@keyframes lm-room-breathe{0%,100%{transform:scale(.94);opacity:.65}50%{transform:scale(1.06);opacity:1}}
+@keyframes lm-window-float{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-7px) rotate(.8deg)}}
+@keyframes lm-sun-glow{0%,100%{box-shadow:0 0 20px #ffdda34f;transform:scale(.98)}50%{box-shadow:0 0 33px #ffdda38c;transform:scale(1.04)}}
+@keyframes lm-plant-sway{0%,100%{transform:rotate(-1deg)}50%{transform:rotate(2.4deg)}}
+@keyframes lm-star-twinkle{0%,100%{opacity:.5;transform:scale(.85)}50%{opacity:1;transform:scale(1.18)}}
+@keyframes lm-note-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@media(max-width:1100px){.lm-companion-art{right:-3%;transform:scale(.84)}.lm-welcome-inner{max-width:430px}}
+@media(max-width:800px){.lm-header-right{gap:8px}.lm-header-caption{display:none}.lm-dashboard-return{padding:8px 10px}.lm-companion-art{right:-10px;top:20px;transform:scale(.72);opacity:.82}.lm-welcome-inner{max-width:420px}}
+@media(max-width:500px){.lm-header-right{gap:6px}.lm-dashboard-return{padding:7px 8px;font-size:9px}.lm-companion-art{right:-76px;top:2px;transform:scale(.68);opacity:.34}.lm-welcome-inner{max-width:100%}.lm-welcome h1,.lm-welcome-copy,.lm-welcome-actions,.lm-safety-note{position:relative;z-index:2}}
+@media(prefers-reduced-motion:reduce){.lm-companion-art *{animation:none!important}}
 `;
 
 export default function Chatbox() {
@@ -399,6 +445,7 @@ export default function Chatbox() {
             </div>
           </div>
           <div className="lm-header-right">
+            <button className="lm-dashboard-return" type="button" onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign("/dashboard"); }} aria-label="Return to dashboard"><span aria-hidden="true">←</span> Dashboard</button>
             <span className="lm-header-caption">A moment for you</span>
             <div className="lm-private-pill"><span className="lm-live-dot" />Here with you</div>
           </div>
@@ -409,14 +456,21 @@ export default function Chatbox() {
             <div className="lm-scroll-area" ref={conversationRef}>
               {messages.length === 0 ? (
                 <div className="lm-welcome">
-                  <div className="lm-companion-art" aria-label="LifeMirror's softly animated companion">
-                    <div className="lm-art-glow" />
-                    <div className="lm-art-ring" />
-                    <div className="lm-art-ring lm-art-ring-two" />
-                    <div className="lm-art-ring lm-art-ring-three" />
-                    <div className="lm-art-orb"><span className="lm-art-symbol">✧</span></div>
-                    <span className="lm-art-spark s1">✦</span><span className="lm-art-spark s2">✧</span>
-                    <span className="lm-art-label">BREATHE · YOU ARE HERE</span>
+                  <div className="lm-companion-art" aria-label="A softly animated cozy window with sunrise and a growing plant">
+                    <div className="lm-room-glow" />
+                    <div className="lm-window-frame">
+                      <div className="lm-window-pane pane-one" />
+                      <div className="lm-window-pane pane-two" />
+                      <div className="lm-window-pane pane-three" />
+                      <div className="lm-window-pane pane-four" />
+                      <div className="lm-sunrise" />
+                      <div className="lm-window-hill hill-back" />
+                      <div className="lm-window-hill hill-front" />
+                      <span className="lm-window-star star-one">✦</span>
+                      <span className="lm-window-star star-two">✧</span>
+                    </div>
+                    <div className="lm-plant-pot"><div className="lm-plant-stem" /><span className="lm-leaf leaf-one" /><span className="lm-leaf leaf-two" /><span className="lm-leaf leaf-three" /><span className="lm-leaf leaf-four" /><div className="lm-pot" /></div>
+                    <div className="lm-art-note"><span>✦</span><span>take it one moment at a time</span></div>
                   </div>
                   <div className="lm-welcome-inner">
                   <div className="lm-eyebrow"><span className="lm-eyebrow-dot" />A little space, just for you</div>
