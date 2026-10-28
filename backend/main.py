@@ -22,6 +22,7 @@ from database import (
     journal_collection,
     personality_collection,
     insights_collection,
+    chat_collection,
 )
 
 from services.ai_service_chat import generate_response
