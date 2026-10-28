@@ -46,6 +46,22 @@ export default function Dashboard() {
   const user=useMemo(()=>{try{return JSON.parse(localStorage.getItem("user")||"{}")}catch{return{}}},[]);
   const token=sessionStorage.getItem("access_token"), name=user.name||user.full_name||"there";
   useEffect(()=>{let alive=true;(async()=>{if(!user.email){setError("Session details are missing. Please sign in again.");setLoading(false);return;}try{const r=await fetch(`${API_URL}/dashboard/${encodeURIComponent(user.email)}`,{headers:token?{Authorization:`Bearer ${token}`}:{}});if(r.status===401||r.status===403){logout();navigate("/",{replace:true});return;}if(!r.ok)throw new Error(`Dashboard request failed (${r.status}).`);const j=await r.json();if(alive)setData(j);}catch(e){if(alive)setError(e.message||"Could not reach the backend.");}finally{if(alive)setLoading(false)}})();return()=>{alive=false}},[navigate,user.email,token]);
+  useEffect(() => {
+    const nodes = document.querySelectorAll(".hero, .insight-path, .path-step, .metric-grid, .section, .lm-footer");
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    nodes.forEach((node) => node.classList.add("lm-scroll-reveal"));
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("lm-is-visible");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -35px 0px" });
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+
   const history=useMemo(()=>Array.isArray(data?.history)?data.history:Array.isArray(data?.journals)?data.journals:[],[data]);
   const sorted=useMemo(()=>[...history].sort((a,b)=>(getDate(b)?.getTime()||0)-(getDate(a)?.getTime()||0)),[history]);
   const counts=useMemo(()=>{const c={positive:0,neutral:0,negative:0};history.forEach(e=>{const k=mood(e);if(c[k]!==undefined)c[k]++});return c},[history]);
@@ -62,70 +78,29 @@ export default function Dashboard() {
   return <div className="lm-app">
     <style>{styles}</style>
         {showWelcome && (
-          <div className="lm-welcome-overlay">
-            <div className="lm-welcome-particles" aria-hidden="true">
-              {["✦", "✨", "♡", "✿", "☀", "✧", "🌷", "💚", "🦋", "⭐"].map(
-                (emoji, i) => (
-                  <span
-                    key={i}
-                    className={`lm-particle lm-particle-${i + 1}`}
-                  >
-                    {emoji}
-                  </span>
-                )
-              )}
-            </div>
-
+          <div className="lm-welcome-overlay" role="dialog" aria-modal="true" aria-labelledby="lm-welcome-title">
             <div className="lm-welcome-card">
-              <div className="lm-welcome-orbit">
-                <div className="lm-welcome-flower">✿</div>
-                <span className="lm-welcome-spark spark-a">✦</span>
-                <span className="lm-welcome-spark spark-b">✧</span>
-                <span className="lm-welcome-spark spark-c">♡</span>
+              <div className="lm-welcome-orbit" aria-hidden="true">
+                <svg className="lm-welcome-mark" viewBox="0 0 100 100" role="presentation">
+                  <path d="M50 15 C37 15 28 25 28 37 C17 39 15 52 22 59 C19 71 29 80 40 78 C45 87 57 87 62 78 C74 80 83 70 78 59 C86 50 80 39 72 37 C72 24 62 15 50 15Z" />
+                  <path d="M50 25V75 M31 38C39 40 42 45 42 50 M69 38C61 40 58 45 58 50 M27 60C36 58 42 61 45 68 M73 60C64 58 58 61 55 68 M42 50L50 56L58 50" />
+                  <circle cx="50" cy="56" r="4" />
+                </svg>
+                <span className="lm-orbit-point point-one" />
+                <span className="lm-orbit-point point-two" />
               </div>
-
-              <div className="lm-welcome-tag">
-                <span className="lm-welcome-dot" />
-                YOUR PERSONAL SPACE IS READY
-              </div>
-
-              <h1>
-                Welcome back,
-                <br />
-                <span>{first(name)}.</span>
-              </h1>
-
-              <p className="lm-welcome-message">
-                Take a breath. Leave the outside noise behind.
-                <br />
-                This little corner of the world is yours. 💚
-              </p>
-
-              <div className="lm-welcome-divider">
-                <span>✧</span>
-              </div>
-
-              <p className="lm-welcome-subtitle">
-                Pause a little. Feel a little. Grow at your own pace.
-              </p>
-
-              <button
-                className="lm-welcome-enter"
-                onClick={() => {
-                  sessionStorage.setItem("lm_welcome_shown", "true");
-                  setShowWelcome(false);
-                }}
-              >
-                Enter my space <span>→</span>
-              </button>
-
-              <small className="lm-welcome-footer">
-                ✿ &nbsp; YOUR INNER WORLD, IN FOCUS
-              </small>
+              <div className="lm-welcome-tag"><span className="lm-welcome-dot" /> LIFEMIRROR / YOUR PERSONAL SPACE</div>
+              <h1 id="lm-welcome-title">A moment for you,<br /><span>{first(name)}.</span></h1>
+              <p className="lm-welcome-message">Your day is more than a mood or a metric. This is a space to notice what matters, connect the dots, and move forward at your own pace.</p>
+              <div className="lm-welcome-divider"><span>YOUR SPACE IS READY</span></div>
+              <button className="lm-welcome-enter" onClick={() => {
+                sessionStorage.setItem("lm_welcome_shown", "true");
+                setShowWelcome(false);
+              }}>Open my dashboard <span>→</span></button>
+              <small className="lm-welcome-footer">PRIVATE BY DESIGN · BUILT AROUND YOUR REFLECTIONS</small>
             </div>
           </div>
         )}
-
 
     <aside className="lm-sidebar"><button className="lm-brand" onClick={()=>jump("overview")}><span className="brand-mark">✿</span><span>Life<span className="mint-text">Mirror</span><small>YOUR INNER WORLD, IN FOCUS</small></span></button>
       <div className="lm-profile"><div className="avatar">{first(name).slice(0,1).toUpperCase()}</div><div><b>{name}</b><small>Personal growth space</small></div><i/></div>
@@ -135,6 +110,28 @@ export default function Dashboard() {
     <main className="lm-main" id="lm-overview"><header className="lm-topbar"><span>YOUR SPACE <i>/</i> <b>OVERVIEW</b></span><div><label>◷ &nbsp;{new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}</label><button onClick={()=>navigate("/chat")}>✳</button><div className="avatar small">{first(name).slice(0,1).toUpperCase()}</div></div></header>
     <div className="lm-content">
       <section className="hero"><div className="hero-copy"><small className="live"><i/> YOUR PERSONAL WELLNESS SPACE</small><h1>A little more <em>you,</em><br/>every day, {first(name)}.</h1><p>A calmer place to notice your patterns, understand your emotions, and grow at your own pace.</p><div className="hero-actions"><button className="primary" onClick={()=>navigate("/journal")}>＋ Write a journal entry <b>↗</b></button><button className="quiet" onClick={()=>navigate("/chat")}>Talk to your AI companion →</button></div></div><div className="hero-art"><div className="orbit o1"/><div className="orbit o2"/><div className="orbit o3"/><div className="flower">✿</div><span className="spark s1">✦</span><span className="spark s2">✧</span><small>PAUSE　·　NOTICE　·　GROW</small></div><div className="hero-bottom"><span>✧ A gentle reminder</span><b>You are allowed to grow at your own pace.</b><small>01 / YOUR JOURNEY</small></div></section>
+      <section className="insight-path" aria-label="How LifeMirror helps you reflect">
+        <div className="insight-path-intro">
+          <span className="path-kicker">THE LIFEMIRROR METHOD</span>
+          <h2>Turn everyday moments<br /><em>into self-understanding.</em></h2>
+          <p>Your entries are the starting point. The value comes from noticing patterns over time, with room for your own interpretation.</p>
+        </div>
+        <div className="path-visual" aria-hidden="true">
+          <div className="path-track"><span className="path-track-fill" /></div>
+          <div className="path-step path-step-one">
+            <div className="path-node"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="17"/><path d="M24 11v26M13 19c5 0 8 3 8 7M35 19c-5 0-8 3-8 7M16 31c4-2 7-1 9 3M32 31c-4-2-7-1-9 3"/></svg></div>
+            <div><small>01 / NOTICE</small><b>Capture the moment</b><span>Give your thoughts a place to land.</span></div>
+          </div>
+          <div className="path-step path-step-two">
+            <div className="path-node"><svg viewBox="0 0 48 48"><circle cx="15" cy="16" r="5"/><circle cx="33" cy="13" r="4"/><circle cx="29" cy="32" r="6"/><circle cx="12" cy="34" r="3"/><path d="M19 15l10-1M17 20l9 8M15 31l9 1M31 17l-2 9"/></svg></div>
+            <div><small>02 / CONNECT</small><b>Find the patterns</b><span>See what repeats across your entries.</span></div>
+          </div>
+          <div className="path-step path-step-three">
+            <div className="path-node"><svg viewBox="0 0 48 48"><path d="M9 35V13M9 35h30M14 29l7-8 6 4 10-13"/><circle cx="14" cy="29" r="2"/><circle cx="21" cy="21" r="2"/><circle cx="27" cy="25" r="2"/><circle cx="37" cy="12" r="2"/></svg></div>
+            <div><small>03 / REFLECT</small><b>Choose your next step</b><span>Use insight as a guide, not a label.</span></div>
+          </div>
+        </div>
+      </section>
       {error&&<div className="error"><b>Dashboard connection notice</b><span>{error}</span><button onClick={()=>window.location.reload()}>Try again ↻</button></div>}
       <section className="metric-grid">
         <article className="metric mood-card"><div className="card-top">MOOD CHECK-IN <i className="mint">☼</i></div><h3>{loading?"…":current}</h3><p>{count?`${count} mood-labelled journal ${count===1?"entry":"entries"}`:"Your mood picture appears as you journal."}</p><div className="bar"><i style={{width:count?`${Math.max(12,counts[top]/count*100)}%`:"6%"}}/></div><button onClick={()=>navigate("/journal")}>Add a check-in <b>↗</b></button></article>
@@ -509,4 +506,65 @@ animation: none !important;
 .lm-welcome-enter {
 transition: none !important;
 }
-}`
+}
+/* LifeMirror visual refresh: calm editorial layout, restrained motion, product-grade hierarchy */
+:root{--bg:#f5f5f0;--panel:#fffefa;--line:#e5e8df;--text:#202d27;--muted:#6e7b72;--mint:#397a5b;--lav:#7870a7;--rose:#b96b75;--blue:#527f9b;--gold:#a9854c}
+html{scroll-padding-top:90px;background:var(--bg)}body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif}
+.lm-app{background:linear-gradient(180deg,#f8f8f3 0%,#f3f4ee 100%);color:var(--text)}
+.lm-sidebar{background:rgba(255,254,250,.94);border-right:1px solid #e4e7de;box-shadow:4px 0 24px #1b2b1e05}
+.lm-brand{color:#20372b}.brand-mark{border:1px solid #c6d8c8;border-radius:12px;color:#397a5b;background:#edf4ec}.mint-text{color:#397a5b}.lm-brand small,.nav-title{color:#829087}
+.lm-profile{background:#f6f7f1;border-color:#e7e9e1}.avatar{background:linear-gradient(140deg,#d8e9d8,#c7d8cb);color:#244a35}.lm-profile b{color:#26372d}.lm-profile small{color:#77847a}
+.nav-item{color:#6b786e;border-radius:9px}.nav-item:hover{background:#f0f3ec;color:#263b2e}.nav-item.active{background:#eaf2e8;border-color:#dce8d9;color:#286446}
+.sidebar-bottom .quote{background:linear-gradient(135deg,#f0f4e9,#f7f4ec);border-color:#e0e7d9}.quote>b{color:#679074}.quote p{color:#4f6055}.quote small{color:#819084}.sidebar-bottom>button{color:#6b786e}.sidebar-bottom>button.signout{color:#a05e65}
+.lm-topbar{background:#fbfbf7e8;border-bottom:1px solid #e6e8e0;color:#849087;backdrop-filter:blur(18px)}.lm-topbar>span b{color:#3c4b40}.lm-topbar>span i{color:#b5bdb4}.lm-topbar label{border-color:#e4e8df;color:#69786d;background:#fffefa}.lm-topbar button{background:#edf3ea;border-color:#dce6d8;color:#397a5b}
+.hero{border-color:#d9e5d8;border-radius:24px;background:radial-gradient(ellipse at 83% 25%,#d6e8d7 0%,transparent 35%),linear-gradient(112deg,#edf3e9 0%,#f5f4ec 55%,#eeefe5 100%);box-shadow:0 16px 40px #243c2608;animation:lmHeroEnter .7s cubic-bezier(.2,.7,.2,1) both}.hero:before{background-image:radial-gradient(#718a7230 .6px,transparent .6px);opacity:.26}
+.live{color:#397a5b}.live i{background:#5c9870;box-shadow:0 0 0 4px #5c987018}.hero h1{color:#20372b;letter-spacing:-1.8px}.hero h1 em{color:#397a5b}.hero-copy>p{color:#65746a}
+.hero-art{opacity:.8}.orbit{border-color:#9ebba04f}.o2{border-color:#b2a9cf70}.o3{border-color:#80998242}.flower{color:#397a5b;background:radial-gradient(circle,#b8d6b7 0%,#dce9d6 65%,#e7eee0 100%);border-color:#b4cdb5;box-shadow:0 8px 30px #41694c12}.spark{color:#8b81b1}.s2{color:#397a5b}.hero-art>small{color:#718575}
+.hero-bottom{border-color:#d5dfd1;color:#758276}.hero-bottom>span{color:#397a5b}.hero-bottom b{color:#42564a}.hero-bottom>small{color:#88958a}
+.primary{background:#2f684a;border-color:#2f684a;color:#fff!important;border-radius:9px;box-shadow:0 5px 14px #2f684a12}.primary:hover{background:#24563c;box-shadow:0 10px 25px #2f684a22}.quiet{color:#45604d!important}
+.metric-grid{gap:14px}.metric,.panel,.feature{background:#fffefa;border:1px solid #e4e7df;box-shadow:0 4px 18px #23362704}.metric{border-radius:14px;min-height:175px}.metric:hover,.panel:hover,.feature:hover{transform:translateY(-2px);border-color:#bfd3bf;box-shadow:0 10px 25px #23362709}
+.card-top{color:#77847a}.card-top i{border-radius:9px}.mint{color:#397a5b!important;background:#e7f1e5}.lav{color:#7770a5!important;background:#eeebf8}.rose{color:#b96b75!important;background:#f8e9eb}.blue{color:#527f9b!important;background:#e8f0f5}
+.metric h3{color:#26372d}.metric h3 small{color:#77847a}.metric p{color:#758177}.metric>button{color:#617267}.metric>button b{color:#397a5b}.bar{background:#e7ebe3}.bar i{background:linear-gradient(90deg,#397a5b,#7da885)}
+.section{margin-top:46px}.lm-heading>div>small{color:#64816a;letter-spacing:1.8px}.lm-heading h2{color:#25372c;letter-spacing:-.9px}.lm-heading p{color:#758177}
+.range{background:#eeefe8;border-color:#e0e5db}.range button{color:#758177}.range button.selected{background:#fffefa;color:#2f684a;box-shadow:0 1px 5px #243c260e}
+.panel{border-radius:15px}.panel-title h3{color:#2c3d31}.panel-title p{color:#7a867d}.panel-title>i{background:#edf3e9;color:#397a5b}
+.lm-legend{color:#718075}.lm-chart{height:180px}.gridline{stroke:#dfe5dc;stroke-dasharray:2 3}.chartline{stroke:#397a5b;filter:none;stroke-width:1.5}.point{stroke:#fffefa;stroke-width:1.6}.point.positive{fill:#397a5b}.point.neutral{fill:#8d83b7}.point.negative{fill:#c27780}.lm-chart-dates{color:#879188}.lm-note{border-color:#e5e8df;color:#7f8b81}
+.lm-empty-icon{border-color:#d7e5d5;background:#edf4e9;color:#397a5b}.lm-empty>b,.empty>b{color:#35483a}.lm-empty p,.empty p{color:#7a867d}
+.donut{background:conic-gradient(#397a5b 0 var(--p),#aaa2d0 var(--p) calc(var(--p) + var(--n)),#d9949c calc(var(--p) + var(--n)) 100%)}.donut:before{background:#fffefa}.donut b{color:#2b3d31}.donut small{color:#7b877d}.distribution{color:#6f7e72}.distribution>div{color:#68776b}.distribution b{color:#34473a}.distribution b small{color:#879187}
+.reflection{border-color:#e0dced;background:radial-gradient(ellipse at 90% 0%,#e7e3f4 0%,transparent 42%),linear-gradient(135deg,#f5f2fa,#fffefa 70%);min-height:285px}.reflection-symbol{background:#ebe7f5;border-color:#e0d9f0;color:#786fa8}.reflection>small{color:#7b72a9}.reflection h3{color:#29392f}.reflection>p{color:#66756a}.reflection footer{border-color:#e6e3ed;color:#7a857b}.reflection footer span{color:#7770a5}.reflection footer button{color:#5c5585}
+.prompts button{border-color:#e4e7df;background:#fbfbf7;color:#67756b;border-radius:9px}.prompts button:hover,.prompts button.chosen{border-color:#cfc7e7;background:#f4f1fa;color:#5f578d}.disclaimer{color:#879187}.text-link{color:#397a5b}
+.pattern>small{color:#7d897f}.pattern h3,.connection h3,.feature h3{color:#2d4033}.pattern p,.connection p,.feature p{color:#758177}.pattern footer{border-color:#e5e8df;color:#879187}.pill{border-color:#e1e6dc;color:#6e7d70;background:#f8f9f4}
+.goal-panel{padding:25px}.goal-header{border-color:#e4e8df}.goal-header>div:first-child>small{color:#397a5b}.goal-header h3{color:#2c3e31}.goal-ring{background:conic-gradient(#397a5b var(--progress),#e5e9e1 0)}.goal-ring:before{background:#fffefa}.goal-ring b{color:#2c3e31}
+.goal-row{border-color:#e9ece5}.check{border-color:#cdd8ca;color:#fff}.goal-row.done .check{background:#397a5b;border-color:#397a5b}.goal-row b{color:#35473a}.goal-row small{color:#7c887e}.goal-row.done b{color:#8a958b}.goal-row>i{color:#849187}
+.breathing{border-color:#d7e5d5;background:radial-gradient(ellipse at 50% 42%,#dcebd9,transparent 58%),linear-gradient(145deg,#edf4e9,#f8f8f2)}.breathing-top{color:#738879}.breathing-top b{color:#397a5b}.breath-circle{border-color:#8eb493;box-shadow:0 0 0 12px #6e9d7010,0 0 0 24px #6e9d7008}.breath-circle small{color:#397a5b}.breath-circle b{color:#314737}.breathing h3{color:#2d4033}.breathing p{color:#718075}.breathing button{color:#397a5b}
+.recent-list{border-color:#e4e7df;background:#fffefa;border-radius:14px}.recent{border-color:#e7eae3}.recent:hover{background:#f8f9f4}.recent-emoji{background:#eeebf8;color:#7770a5}.recent-emoji.positive{background:#e7f1e5;color:#397a5b}.recent-emoji.negative{background:#f8e9eb;color:#b96b75}.recent small{color:#7c887d}.recent p{color:#46584b}.recent>button{border-color:#e1e6dc;background:#f6f8f2;color:#397a5b}
+.personality-intro{background:radial-gradient(ellipse at 100% 0,#f6e8e9 0%,transparent 42%),#fffefa}.personality-intro>i{color:#b96b75;background:#f8e9eb}.personality-intro>small{color:#7c887d}.personality-intro h3{color:#2d4033}.personality-intro p{color:#738075}
+.secondary{background:#f8e9eb;color:#8c4e57!important;border-color:#f0d8dc}.trait{color:#66756a}.trait>div{background:#e8ece5}.trait>div>i{background:linear-gradient(90deg,#aaa1ce,#6d9a77)}.trait small{color:#7f8b81}
+.connection{min-height:225px}.planned{color:#8a7c5d}.integration-note{color:#7e887e;border-color:#c3a66d;background:#f8f4e9}.feature{min-height:204px}.feature-grid{gap:14px}
+.lm-footer{border-color:#e2e7dd}.lm-footer>div b{color:#397a5b}.lm-footer>div small{color:#829084}.lm-footer>p{color:#7b877d}.lm-footer nav button{color:#728075}
+.error{border-color:#eed1d3;background:#fbf0f0;color:#7f6568}.error b{color:#a35c64}.error button{color:#397a5b}
+.modal-backdrop{background:#1e2c22a8;backdrop-filter:blur(8px)}.modal{border-color:#d7e5d5;background:#fffefa;box-shadow:0 25px 100px #1c2a1d25}.modal-close{color:#728075}.modal-symbol{background:#edf4e9;color:#397a5b}.modal>small{color:#66816a}.modal h2{color:#293d30}.modal p{color:#6f7e72}.modal-points{color:#4e6253}.modal-points span:before{color:#397a5b}
+.toast{border-color:#d6e4d4;background:#fffefa;box-shadow:0 15px 45px #1c2a1d16;color:#35483a}.toast>span{color:#397a5b}.toast button{color:#7c887e}
+.lm-welcome-overlay{background:rgba(24,39,29,.56);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px);padding:22px}
+.lm-welcome-card{width:min(490px,100%);padding:40px 42px 32px;border:1px solid #d9e5d6;border-radius:24px;background:linear-gradient(145deg,#fffefa,#f2f5ec);box-shadow:0 35px 100px #17281d35,inset 0 1px #ffffff;animation:lmWelcomeCardIn .65s cubic-bezier(.2,.8,.2,1) both}
+.lm-welcome-card:before{background-image:radial-gradient(#688b6a16 .6px,transparent .6px);opacity:.25}.lm-welcome-orbit{width:120px;height:120px;margin:0 auto 25px;border-color:#b7cfb4;animation:lmWelcomeOrbit 30s linear infinite}.lm-welcome-orbit:before{border-color:#d1c9e6}.lm-welcome-orbit:after{border-color:#c5d8c0}
+.lm-welcome-mark{width:66px;height:66px;fill:none;stroke:#397a5b;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 4px 12px #397a5b18)}
+.lm-orbit-point{position:absolute;width:7px;height:7px;border-radius:50%;background:#6d9a77;box-shadow:0 0 0 5px #6d9a7718}.point-one{top:12px;right:12px}.point-two{bottom:13px;left:12px;background:#9589bd;box-shadow:0 0 0 5px #9589bd18}
+.lm-welcome-tag{color:#597b5e;font-size:8px;letter-spacing:1.6px;margin-bottom:18px}.lm-welcome-dot{background:#5d9569;box-shadow:0 0 0 4px #5d95691b}
+.lm-welcome-card h1{color:#26392c;font-size:clamp(31px,5vw,39px);letter-spacing:-1.5px}.lm-welcome-card h1 span{background:linear-gradient(100deg,#397a5b,#7b72a8);-webkit-background-clip:text;background-clip:text}
+.lm-welcome-message{color:#6a796d;font-size:12px;line-height:1.9;max-width:365px;margin:18px auto 0}.lm-welcome-divider{margin:23px 0 22px;color:#8b9587;font-size:8px;letter-spacing:1.6px}.lm-welcome-divider:before,.lm-welcome-divider:after{background:linear-gradient(90deg,transparent,#d6dfd1)}.lm-welcome-divider:after{background:linear-gradient(90deg,#d6dfd1,transparent)}
+.lm-welcome-enter{min-height:49px;border-color:#2f684a;background:#2f684a;color:#fff!important;border-radius:9px;box-shadow:0 7px 20px #2f684a18}.lm-welcome-enter:hover{box-shadow:0 12px 26px #2f684a25}.lm-welcome-footer{color:#8b9689;font-size:7px;letter-spacing:1.35px;margin-top:21px}
+.insight-path{position:relative;display:grid;grid-template-columns:minmax(0,.95fr) minmax(0,1.05fr);gap:clamp(24px,5vw,70px);align-items:center;margin:24px 0 5px;padding:27px 30px;border:1px solid #e1e7dc;border-radius:18px;background:linear-gradient(110deg,#fffefa,#f1f5ec);overflow:hidden}
+.insight-path:before{content:"";position:absolute;width:270px;height:270px;right:-100px;top:-150px;border-radius:50%;border:1px solid #dce7d7;box-shadow:0 0 0 24px #dce7d71a,0 0 0 48px #dce7d712;pointer-events:none}
+.path-kicker{font-size:8px;font-weight:700;letter-spacing:1.8px;color:#64816a}.insight-path-intro h2{margin:11px 0 10px;font:700 clamp(21px,2.3vw,29px)/1.22 Manrope;letter-spacing:-1px;color:#26392c}.insight-path-intro h2 em{font-style:normal;color:#397a5b}.insight-path-intro p{max-width:400px;margin:0;color:#758177;font-size:11px;line-height:1.8}
+.path-visual{position:relative;display:flex;flex-direction:column;gap:13px;padding:2px 0}.path-track{position:absolute;top:25px;bottom:25px;left:22px;width:1px;background:#d9e4d5}.path-track-fill{display:block;width:100%;height:100%;transform-origin:top;transform:scaleY(.7);background:linear-gradient(#6c9b73,#b7c9b1)}
+.path-step{position:relative;display:flex;align-items:center;gap:14px;padding:8px 10px;border-radius:12px;transition:background .25s,transform .35s}.path-step:hover{background:#f6f8f2;transform:translateX(3px)}.path-node{position:relative;z-index:1;width:44px;height:44px;flex:0 0 44px;display:grid;place-items:center;border:1px solid #dce7d8;border-radius:13px;background:#fffefa;box-shadow:0 3px 10px #2d4a2f08}.path-node svg{width:28px;height:28px;fill:none;stroke:#397a5b;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.path-step-two .path-node svg{stroke:#8176ae}.path-step-three .path-node svg{stroke:#668d70}.path-step>div:last-child{display:flex;flex-direction:column;gap:3px}.path-step small{font-size:7px;letter-spacing:1.5px;font-weight:700;color:#829083}.path-step b{font:700 11px Manrope;color:#34483a}.path-step span{font-size:9px;color:#7a877c;line-height:1.5}
+.lm-scroll-reveal{opacity:0;transform:translateY(18px);transition:opacity .65s ease,transform .65s cubic-bezier(.2,.7,.2,1)}.lm-scroll-reveal.lm-is-visible{opacity:1;transform:translateY(0)}
+.metric-grid.lm-scroll-reveal .metric{opacity:0;transform:translateY(12px);animation:none;transition:opacity .5s ease,transform .5s ease}.metric-grid.lm-is-visible .metric{opacity:1;transform:translateY(0)}.metric-grid.lm-is-visible .metric:nth-child(2){transition-delay:.08s}.metric-grid.lm-is-visible .metric:nth-child(3){transition-delay:.16s}.metric-grid.lm-is-visible .metric:nth-child(4){transition-delay:.24s}
+@keyframes lmHeroEnter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:1200px){.insight-path{gap:25px;padding:24px}.hero-copy{max-width:58%}.hero-art{right:0}}
+@media(max-width:900px){.insight-path{grid-template-columns:1fr;gap:18px}.insight-path-intro p{max-width:600px}.path-visual{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.path-track{display:none}.path-step{align-items:flex-start;flex-direction:column;padding:10px}.path-step>div:last-child{gap:5px}.path-step span{font-size:9px}.hero-copy{max-width:75%}}
+@media(max-width:580px){.lm-welcome-card{padding:30px 22px 24px;border-radius:20px}.lm-welcome-orbit{width:100px;height:100px;margin-bottom:22px}.lm-welcome-mark{width:56px;height:56px}.lm-welcome-tag{font-size:7px;letter-spacing:1.1px}.lm-welcome-message{font-size:11px}.insight-path{padding:21px 17px;margin-top:18px}.path-visual{grid-template-columns:1fr;gap:4px}.path-step{flex-direction:row;align-items:center;padding:9px 4px}.path-node{width:39px;height:39px;flex-basis:39px}.path-node svg{width:24px;height:24px}.hero{background:linear-gradient(130deg,#edf3e9,#f5f4ec)}.hero-art{opacity:.23}.hero-copy{max-width:100%}.lm-heading h2{letter-spacing:-.7px}}
+@media(prefers-reduced-motion:reduce){.lm-scroll-reveal,.metric-grid.lm-scroll-reveal .metric{opacity:1;transform:none;transition:none}}
+`
