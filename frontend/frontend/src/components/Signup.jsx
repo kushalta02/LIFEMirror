@@ -239,6 +239,284 @@ const signupStyles = `
   .ms-topline{font-size:8px}
   .ms-card h2{font-size:34px}
 }
+/* ===== LIFEMIRROR SIGNUP: DARK AURORA UPGRADE ===== */
+
+.mirror-signup-page {
+  background:
+    radial-gradient(ellipse at 12% 15%, #29204c55, transparent 38%),
+    radial-gradient(ellipse at 85% 80%, #103d3b40, transparent 38%),
+    #070914;
+}
+
+.ms-ambient {
+  background:
+    radial-gradient(circle at 18% 25%, #9d8bff0a 0 1px, transparent 2px),
+    radial-gradient(circle at 72% 18%, #a5f3d518 0 1px, transparent 2px),
+    radial-gradient(circle at 60% 70%, #b5aaff12 0 1px, transparent 2px);
+  background-size: 130px 130px, 190px 190px, 230px 230px;
+  animation: ms-stardrift 24s linear infinite;
+}
+
+.ms-ambient:before {
+  background: #7664ff;
+  opacity: .24;
+  animation: ms-aurora-one 12s ease-in-out infinite alternate;
+}
+
+.ms-ambient:after {
+  background: #36e6bd;
+  opacity: .19;
+  animation: ms-aurora-two 15s ease-in-out infinite alternate;
+}
+
+.ms-left,
+.ms-right {
+  animation: ms-enter .9s cubic-bezier(.2,.7,.2,1) both;
+}
+
+.ms-right {
+  animation-delay: .12s;
+}
+
+.ms-logo-icon {
+  box-shadow: 0 0 25px #a5f3d51a, inset 0 0 16px #a5f3d510;
+  transition: transform .35s ease, box-shadow .35s ease;
+}
+
+.ms-logo:hover .ms-logo-icon {
+  transform: rotate(-8deg) scale(1.06);
+  box-shadow: 0 0 30px #a5f3d53d;
+}
+
+.ms-headline span {
+  background-size: 200% auto;
+  animation: ms-text-glow 7s ease-in-out infinite alternate;
+}
+
+.ms-art {
+  perspective: 800px;
+}
+
+.ms-ring-a {
+  box-shadow: 0 0 20px #b5aaff08;
+}
+
+.ms-ring-b {
+  filter: drop-shadow(0 0 8px #a5f3d512);
+}
+
+.ms-ring-c {
+  box-shadow: inset 0 0 25px #b5aaff09;
+  animation: ms-ring-pulse 6s ease-in-out infinite;
+}
+
+.ms-sun {
+  box-shadow:
+    0 0 35px #7b67f44d,
+    0 0 100px #7b67f41c,
+    inset 0 0 25px #b4aaff20;
+}
+
+.ms-sun-inner {
+  box-shadow: 0 0 28px #a5f3d512, inset 0 0 18px #a5f3d510;
+  animation: ms-inner-pulse 4s ease-in-out infinite;
+}
+
+.ms-spark {
+  text-shadow: 0 0 15px currentColor;
+  animation: ms-twinkle 3s ease-in-out infinite;
+}
+
+.ms-spark-b {
+  animation-delay: .8s;
+}
+
+.ms-spark-c {
+  animation-delay: 1.4s;
+}
+
+.ms-card {
+  border-color: #c7c5f233;
+  background:
+    radial-gradient(ellipse at 100% 0%, #7966ff12, transparent 48%),
+    linear-gradient(145deg, #191d33f7, #0b0e1cf7);
+  box-shadow:
+    0 30px 90px #00000055,
+    0 0 45px #7c6bff0b,
+    inset 0 1px #ffffff12;
+  transition: border-color .35s ease, box-shadow .35s ease,
+    transform .35s ease;
+}
+
+.ms-card:hover {
+  border-color: #b5aaff4d;
+  box-shadow:
+    0 35px 100px #00000065,
+    0 0 55px #7c6bff12,
+    inset 0 1px #ffffff18;
+}
+
+.ms-card-glow {
+  background: #806ef533;
+  animation: ms-card-light 9s ease-in-out infinite alternate;
+}
+
+.ms-symbol {
+  box-shadow: 0 0 25px #a5f3d510;
+  transition: transform .3s ease, box-shadow .3s ease;
+}
+
+.ms-card:hover .ms-symbol {
+  transform: rotate(12deg);
+  box-shadow: 0 0 26px #a5f3d52a;
+}
+
+.ms-input {
+  background: #070a168c;
+  border-color: #343a55;
+  transition: border-color .25s ease, background .25s ease,
+    box-shadow .25s ease, transform .25s ease;
+}
+
+.ms-input:hover {
+  border-color: #7773a65e;
+}
+
+.ms-input:focus-within {
+  border-color: #a5f3d5c9;
+  background: #0b1020;
+  box-shadow:
+    0 0 0 3px #a5f3d512,
+    0 0 25px #a5f3d50c,
+    inset 0 0 18px #a5f3d506;
+  transform: translateY(-1px);
+}
+
+.ms-input:focus-within .ms-input-icon {
+  stroke: #a5f3d5;
+}
+
+.ms-submit {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 7px 25px #a5f3d510;
+  transition: transform .25s ease, filter .25s ease,
+    box-shadow .25s ease, opacity .25s ease;
+}
+
+.ms-submit:before {
+  content: "";
+  position: absolute;
+  top: -80%;
+  left: -45%;
+  width: 30%;
+  height: 260%;
+  background: #ffffff70;
+  transform: rotate(25deg);
+  filter: blur(8px);
+  transition: left .65s ease;
+  pointer-events: none;
+}
+
+.ms-submit:hover:not(:disabled) {
+  transform: translateY(-3px);
+  filter: brightness(1.08);
+  box-shadow: 0 12px 32px #a5f3d526;
+}
+
+.ms-submit:hover:not(:disabled):before {
+  left: 125%;
+}
+
+.ms-submit-arrow {
+  transition: transform .25s ease;
+}
+
+.ms-submit:hover:not(:disabled) .ms-submit-arrow {
+  transform: translate(3px, -2px);
+}
+
+.ms-login-link a {
+  transition: color .2s ease, text-shadow .2s ease;
+}
+
+.ms-login-link a:hover {
+  color: #d4fff0;
+  text-shadow: 0 0 16px #a5f3d54d;
+}
+
+@keyframes ms-enter {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ms-aurora-one {
+  0% { transform: translate(0, 0) scale(.92); }
+  100% { transform: translate(100px, 80px) scale(1.2); }
+}
+
+@keyframes ms-aurora-two {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-90px, -65px) scale(1.18); }
+}
+
+@keyframes ms-stardrift {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to { background-position: 130px -130px, -190px 190px, 230px -230px; }
+}
+
+@keyframes ms-text-glow {
+  from { background-position: 0% center; }
+  to { background-position: 100% center; }
+}
+
+@keyframes ms-ring-pulse {
+  0%, 100% { opacity: .65; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.035); }
+}
+
+@keyframes ms-inner-pulse {
+  0%, 100% { box-shadow: 0 0 15px #a5f3d50a; }
+  50% { box-shadow: 0 0 28px #a5f3d526; }
+}
+
+@keyframes ms-twinkle {
+  0%, 100% { opacity: .55; transform: scale(.9) rotate(-8deg); }
+  50% { opacity: 1; transform: scale(1.13) rotate(8deg); }
+}
+
+@keyframes ms-card-light {
+  0% { transform: translate(0, 0); opacity: .65; }
+  100% { transform: translate(-45px, 35px); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ms-ambient,
+  .ms-ambient:before,
+  .ms-ambient:after,
+  .ms-left,
+  .ms-right,
+  .ms-headline span,
+  .ms-ring-c,
+  .ms-sun-inner,
+  .ms-spark,
+  .ms-card-glow {
+    animation: none !important;
+  }
+
+  .ms-submit:before {
+    display: none;
+  }
+
+  .ms-logo-icon,
+  .ms-card,
+  .ms-input,
+  .ms-submit {
+    transition: none;
+  }
+}
+
+
 @media(prefers-reduced-motion:reduce){
   .ms-sun,.ms-ring-a,.ms-ring-b{animation:none}
   .ms-submit{transition:none}
