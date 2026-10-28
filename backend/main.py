@@ -579,6 +579,7 @@ async def get_dashboard(
 
 
 
+
 # ---------------- CHAT ----------------
 
 from datetime import datetime, timezone
@@ -588,9 +589,12 @@ MAX_CHAT_HISTORY = 12
 
 
 @app.post("/chat")
-async def chat(data: ChatRequest):
+async def chat(
+    data: ChatRequest,
+    current_user: dict = Depends(get_current_user),
+):
     message = data.message.strip()
-    email_key = data.email.strip().lower()
+    email_key = current_user["email"].strip().lower()
 
     if not message:
         raise HTTPException(
@@ -598,21 +602,14 @@ async def chat(data: ChatRequest):
             detail="Message cannot be empty",
         )
 
-    if not email_key or email_key == "guest":
-        raise HTTPException(
-            status_code=400,
-            detail="A valid user email is required",
-        )
-
     try:
-        # Load the latest messages from MongoDB
+        # Load this authenticated user's recent messages
         saved_messages = list(
             chat_collection.find(
                 {"email": email_key}
             ).sort("_id", -1).limit(MAX_CHAT_HISTORY)
         )
 
-        # Restore messages into chronological order
         saved_messages.reverse()
 
         history = [
@@ -625,37 +622,35 @@ async def chat(data: ChatRequest):
             and isinstance(item.get("content"), str)
         ]
 
-        # Generate the AI response using saved conversation history
         reply = generate_response(
             message=message,
             mood=data.mood,
             history=history,
+            user_name=current_user.get("name") or None,
         )
 
         now = datetime.now(timezone.utc)
 
-        # Save the user's message
-        chat_collection.insert_one({
-            "email": email_key,
-            "role": "user",
-            "content": message,
-            "created_at": now,
-        })
-
-        # Save the AI response
-        chat_collection.insert_one({
-            "email": email_key,
-            "role": "assistant",
-            "content": reply,
-            "created_at": now,
-        })
+        chat_collection.insert_many([
+            {
+                "email": email_key,
+                "role": "user",
+                "content": message,
+                "created_at": now,
+            },
+            {
+                "email": email_key,
+                "role": "assistant",
+                "content": reply,
+                "created_at": now,
+            },
+        ])
 
         return {"reply": reply}
 
     except PyMongoError:
         import logging
         logging.exception("LifeMirror chat database operation failed")
-
         raise HTTPException(
             status_code=500,
             detail="Could not save or load chat history",
@@ -664,11 +659,11 @@ async def chat(data: ChatRequest):
     except Exception:
         import logging
         logging.exception("LifeMirror chat generation failed")
-
         raise HTTPException(
             status_code=500,
             detail="AI assistant is temporarily unavailable",
         )
+
 
 
 # ---------------- RECOMMENDATIONS ----------------
