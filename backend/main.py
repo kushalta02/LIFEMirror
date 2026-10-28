@@ -152,6 +152,7 @@ class ChatRequest(BaseModel):
     message: str
     mood: str = "neutral"
     email: str = "guest"
+    conversation_id: str | None = None
 
 
 # ---------------- HELPERS ----------------
