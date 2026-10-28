@@ -93,6 +93,7 @@ export default function Journal() {
   const [reminderIndex, setReminderIndex] = useState(0);
   const [breathingActive, setBreathingActive] = useState(false);
   const [moodFeedback, setMoodFeedback] = useState(null);
+  const [scrollProgress, setScrollProgress] = useState(0);
 
   const loadEntries = useCallback(async (quiet = false) => {
     if (!user?.email) {
@@ -124,6 +125,50 @@ export default function Journal() {
   }, [user]);
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
+
+  // Scroll-linked scene reveals and a small memory mote that follows the reading journey.
+  useEffect(() => {
+    const updateProgress = () => {
+      const root = document.documentElement;
+      const maxScroll = root.scrollHeight - window.innerHeight;
+      setScrollProgress(maxScroll > 0 ? Math.min(100, Math.max(0, (window.scrollY / maxScroll) * 100)) : 0);
+    };
+    updateProgress();
+    window.addEventListener("scroll", updateProgress, { passive: true });
+    window.addEventListener("resize", updateProgress);
+    return () => {
+      window.removeEventListener("scroll", updateProgress);
+      window.removeEventListener("resize", updateProgress);
+    };
+  }, []);
+
+  useEffect(() => {
+    const root = document.querySelector(".lm-journal");
+    if (!root) return undefined;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const targets = root.querySelectorAll(
+      ".lj-hero, .lj-gentle-banner, .lj-breathe-card, .lj-stat, .lj-composer, .lj-write-again, .lj-detail, .lj-archive, .lj-bottom-reminder"
+    );
+    if (reduceMotion || !("IntersectionObserver" in window)) {
+      targets.forEach((element) => element.classList.add("lj-reveal", "is-visible"));
+      return undefined;
+    }
+    root.classList.add("lj-motion-ready");
+    const observer = new IntersectionObserver((observations) => {
+      observations.forEach((observation) => {
+        if (observation.isIntersecting) {
+          observation.target.classList.add("is-visible");
+          observer.unobserve(observation.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: "0px 0px -5% 0px" });
+    targets.forEach((element, index) => {
+      element.classList.add("lj-reveal");
+      element.style.setProperty("--reveal-delay", `${Math.min(index % 3, 2) * 85}ms`);
+      observer.observe(element);
+    });
+    return () => observer.disconnect();
+  }, [entries.length, showEditor, activeEntry]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -303,8 +348,14 @@ export default function Journal() {
   const activeMood = moodInfo(activeEntry?.mood || activeAnalysis?.mood);
 
   return (
-    <div className="lm-journal">
+    <div className="lm-journal" style={{ "--page-progress": `${scrollProgress}%` }}>
       <style>{styles}</style>
+      <div className="lj-scroll-progress" aria-hidden="true"><span style={{ width: `${scrollProgress}%` }} /></div>
+      <div className="lj-memory-rail" aria-hidden="true">
+        <span className="lj-memory-rail-track" />
+        <span className="lj-memory-mote" style={{ top: `${scrollProgress}%` }}><i /></span>
+        <span className="lj-memory-rail-label">YOUR STORY</span>
+      </div>
       <header className="lj-topbar">
         <button className="lj-brand" onClick={() => { window.location.href = "/dashboard"; }} aria-label="Go to dashboard">
           <span className="lj-brand-icon">✿</span>
@@ -317,7 +368,7 @@ export default function Journal() {
       </header>
 
       <main className="lj-shell">
-        <section className="lj-hero">
+        <section className="lj-hero lj-scene lj-scene-intro">
           <div className="lj-hero-copy">
             <span className="lj-kicker">PAUSE · NOTICE · REFLECT</span>
             <h1>Make space for <em>yourself,</em> {firstName}.</h1>
@@ -333,7 +384,7 @@ export default function Journal() {
           </div>
         </section>
 
-        <section className="lj-gentle-banner" aria-live="polite">
+        <section className="lj-gentle-banner lj-scene lj-scene-reminder" aria-live="polite">
           <span className="lj-banner-icon">✧</span>
           <div key={reminderIndex} className="lj-reminder-copy">
             <span>A LITTLE REMINDER FOR YOU</span>
@@ -342,7 +393,7 @@ export default function Journal() {
           <button type="button" className="lj-reminder-next" onClick={() => setReminderIndex((current) => (current + 1) % REMINDERS.length)} aria-label="Show another reminder">↗</button>
         </section>
 
-        <section className={`lj-breathe-card ${breathingActive ? "is-breathing" : ""}`}>
+        <section className={`lj-breathe-card lj-scene lj-scene-breathe ${breathingActive ? "is-breathing" : ""}`}>
           <div className="lj-breathe-copy">
             <span className="lj-kicker">A PAUSE, JUST FOR YOU</span>
             <h2>{breathingActive ? "Breathe in… and slowly out." : "Give your mind a softer moment."}</h2>
@@ -355,7 +406,7 @@ export default function Journal() {
           </div>
         </section>
 
-        <section className="lj-stats" aria-label="Journal overview">
+        <section className="lj-stats lj-scene lj-scene-stats" aria-label="Journal overview">
           <article className="lj-stat"><span className="lj-stat-icon sage">✎</span><div><small>REFLECTIONS</small><strong>{entries.length}</strong><p>Every page is part of your story</p></div></article>
           <article className="lj-stat"><span className="lj-stat-icon peach">☼</span><div><small>POSITIVE MOMENTS</small><strong>{positiveCount}</strong><p>Entries the AI read as positive</p></div></article>
           <article className="lj-stat"><span className="lj-stat-icon lilac">♡</span><div><small>CHECK-INS TODAY</small><strong>{todayCount}</strong><p>{todayCount ? "You made time to check in" : "There is no rush to write"}</p></div></article>
@@ -367,7 +418,7 @@ export default function Journal() {
         <div className="lj-layout">
           <section className="lj-left-column">
             {showEditor ? (
-              <article className="lj-card lj-composer">
+              <article className="lj-card lj-composer lj-scene-editor">
                 <div className="lj-section-heading">
                   <div><span className="lj-kicker">{editingId ? "A SECOND LOOK" : "A MOMENT TO CHECK IN"}</span><h2>{editingId ? "Edit your reflection" : "What’s on your mind?"}</h2><p>Start with whatever feels easiest. You can keep it short.</p></div>
                   <span className="lj-heading-flower">✿</span>
@@ -443,7 +494,7 @@ export default function Journal() {
             )}
           </section>
 
-          <section className="lj-card lj-archive">
+          <section className="lj-card lj-archive lj-scene-archive">
             <div className="lj-section-heading">
               <div><span className="lj-kicker">YOUR PERSONAL ARCHIVE</span><h2>Past reflections</h2><p>Revisit a moment with curiosity, not judgement.</p></div>
               <span className="lj-count">{entries.length} saved</span>
@@ -478,7 +529,7 @@ export default function Journal() {
           </section>
         </div>
 
-        <section className="lj-bottom-reminder"><span className="lj-reminder-icon">☼</span><div><span className="lj-kicker">A REMINDER TO KEEP</span><h2>You are allowed to feel what you feel.</h2><p>Your journal is a place to notice your experience—not judge yourself for having it.</p></div><span className="lj-reminder-flower">✿</span></section>
+        <section className="lj-bottom-reminder lj-scene lj-scene-closing"><span className="lj-reminder-icon">☼</span><div><span className="lj-kicker">A REMINDER TO KEEP</span><h2>You are allowed to feel what you feel.</h2><p>Your journal is a place to notice your experience—not judge yourself for having it.</p></div><span className="lj-reminder-flower">✿</span></section>
         <footer className="lj-footer"><span>LifeMirror <i>•</i> Your reflection space</span><span>Small moments of honesty count, too.</span></footer>
       </main>
 
@@ -580,4 +631,135 @@ const styles = `
 @keyframes lj-confetti-fall{0%{transform:translateY(0) rotate(0);opacity:0}15%{opacity:1}100%{transform:translateY(250px) rotate(220deg);opacity:0}}
 @media(max-width:650px){.lj-gentle-banner{padding:13px;gap:10px}.lj-banner-icon{flex-basis:36px;width:36px;height:36px}.lj-reminder-copy p{font-size:11px}.lj-breathe-card{padding:18px;gap:6px}.lj-breathe-copy h2{font-size:16px}.lj-breathe-copy p{font-size:10px}.lj-breathe-visual{flex-basis:95px;width:95px;height:95px}.lj-breathe-circle{width:66px;height:66px}.lj-breathe-circle span{font-size:10px}.lj-breathe-circle small{font-size:7px}.lj-feedback-toast{right:14px;bottom:14px;padding:17px 38px 17px 14px}.lj-feedback-toast h2{font-size:14px}}
 @media(prefers-reduced-motion:reduce){.lj-hero,.lj-art-flower,.lj-art-note,.lj-rotating-quote,.lj-reminder-copy,.lj-banner-icon,.lj-feedback-toast,.lj-celebration-bits span{animation:none!important}.lj-entry:hover{transform:none}}
+
+/* JOURNAL STORY MODE — a distinct, colourful editorial experience with scroll choreography */
+.lm-journal{
+  --paper:#f8f6f1;--card:#fffdf8;--ink:#263b3a;--muted:#71817c;
+  --sage:#d9e8d9;--sage-deep:#3e7063;--sage-dark:#28584f;
+  --coral:#ed927b;--coral-ink:#9c4f43;--blue:#c9e4ed;--blue-ink:#386a7a;
+  --butter:#f3d98d;--butter-ink:#84631e;--lilac:#ded0f3;--lilac-ink:#7254a0;
+  --rose:#f4c9d1;--rose-ink:#9a5269;position:relative;overflow:clip;
+  background:radial-gradient(ellipse at 7% 6%,#d9eee2 0,transparent 25%),radial-gradient(ellipse at 96% 22%,#e5d9f5 0,transparent 22%),radial-gradient(ellipse at 4% 58%,#fae1d2 0,transparent 18%),radial-gradient(ellipse at 97% 83%,#d8eaf1 0,transparent 23%),#f8f6f1;
+}
+.lj-scroll-progress{position:fixed;inset:0 0 auto;z-index:1500;height:4px;background:#243d3a12;pointer-events:none}
+.lj-scroll-progress span{display:block;height:100%;background:linear-gradient(90deg,#3b7464,#80b8a0 22%,#e8b17b 48%,#a38bd5 72%,#e8899b);box-shadow:0 0 12px #8bbda7a0;transition:width .08s linear}
+.lj-memory-rail{position:fixed;z-index:40;right:16px;top:20vh;width:22px;height:58vh;pointer-events:none}
+.lj-memory-rail-track{position:absolute;left:10px;top:0;bottom:0;width:2px;border-radius:5px;background:linear-gradient(#7cbba0,#e9c27c,#d5a3d7,#7bb6ca);opacity:.55}
+.lj-memory-mote{position:absolute;left:3px;display:grid;place-items:center;width:16px;height:16px;border:1px solid #ffffffc9;border-radius:50%;background:linear-gradient(135deg,#fff4b8,#ff9c86 55%,#b6a1e6);box-shadow:0 0 0 5px #ffffff78,0 0 20px #e5a7a4;transform:translateY(-50%);transition:top .18s ease-out}
+.lj-memory-mote i{width:4px;height:4px;border-radius:50%;background:white;box-shadow:0 0 6px white}
+.lj-memory-rail-label{position:absolute;top:calc(100% + 12px);left:10px;writing-mode:vertical-rl;transform:rotate(180deg);color:#8b8c7d;font-size:7px;font-weight:900;letter-spacing:2px}
+.lj-topbar{position:relative;z-index:2;background:#fffdf8d9;border-bottom-color:#e5e1d6}
+.lj-brand-icon{background:linear-gradient(140deg,#f4d5ca,#e1d6f5);color:#6b5a78;box-shadow:0 5px 15px #8b6f8d17}
+.lj-brand-name>span{color:#3e7063}
+.lj-hero{isolation:isolate;min-height:340px;border:1px solid #d6e5d9;border-radius:30px;background:linear-gradient(115deg,#dff0e3 0%,#f8f0d9 45%,#f4d9d4 72%,#e8dcf6 100%);box-shadow:0 20px 55px #3d625018}
+.lj-hero:before,.lj-hero:after{content:"";position:absolute;z-index:-1;pointer-events:none;border-radius:50%;filter:blur(1px)}
+.lj-hero:before{width:230px;height:230px;right:9%;top:-125px;background:radial-gradient(circle,#ffffffc9,transparent 70%);animation:lj-cloud-drift 9s ease-in-out infinite}
+.lj-hero:after{width:180px;height:180px;left:40%;bottom:-135px;background:radial-gradient(circle,#e6c9f3a8,transparent 72%);animation:lj-cloud-drift 11s ease-in-out infinite reverse}
+.lj-hero h1{font-size:clamp(36px,4.3vw,55px);letter-spacing:-2.5px;color:#293d37}
+.lj-hero h1 em{color:#b76558}
+.lj-hero-copy>p{color:#586e65;font-size:13px;max-width:540px}
+.lj-kicker{color:#4b8071}
+.lj-button-primary{border-color:#315f54;background:linear-gradient(120deg,#315f54,#477d6c);box-shadow:0 8px 20px #315f542b}
+.lj-button-primary:hover:not(:disabled){background:linear-gradient(120deg,#244c43,#3d7060);box-shadow:0 12px 25px #315f5435}
+.lj-hero-art{min-height:240px}
+.lj-sun-glow{width:205px;height:205px;background:radial-gradient(circle,#ffe8a5d9 0,#f5c9b8a8 38%,#c9b4e66e 58%,transparent 74%);animation:lj-sun-bloom 7s ease-in-out infinite}
+.lj-art-ring{border-color:#729e9380}
+.ring-a{width:205px;height:205px;border-style:dashed;animation:lj-orbit-turn 30s linear infinite}
+.ring-b{width:255px;height:130px;border-color:#c18cba9c;animation:lj-orbit-turn 22s linear infinite reverse}
+.lj-art-flower{width:115px;height:115px;border:1px solid #fff9e8;border-radius:38px;background:linear-gradient(145deg,#fff9df,#f0bcb2 48%,#c5b5e7);box-shadow:0 20px 45px #966d8050;color:#fffaf1;font-size:70px;text-shadow:0 3px 10px #8f6a6d4d;animation:lj-flower-drift 6s ease-in-out infinite,lj-glow-pulse 4s ease-in-out infinite}
+.lj-art-note{right:-3px;bottom:2px;max-width:240px;border-color:#ffffffc9;background:#fffdf0ed;box-shadow:0 14px 34px #4e53401c;backdrop-filter:blur(12px)}
+.lj-art-note span{color:#a7655a}.lj-art-note strong{color:#40554a}
+.lj-gentle-banner{border-color:#e5d9c8;background:linear-gradient(105deg,#f8e6b7 0%,#f6d7cf 47%,#e5d9f4 100%);box-shadow:0 13px 30px #986b5310}
+.lj-gentle-banner:after{width:190px;height:190px;right:5%;top:-135px;background:#ffffff7d}
+.lj-banner-icon{background:#fffaf0;color:#bb7764;box-shadow:0 7px 16px #9d73651a}
+.lj-reminder-copy>span{color:#9c6c47}.lj-reminder-copy p{color:#584b49}
+.lj-reminder-next{border-color:#ffffff;background:#ffffffbd;color:#8c5d65}
+.lj-reminder-next:hover{background:#fff;box-shadow:0 5px 15px #956b681f}
+.lj-breathe-card{border-color:#cddfe9;background:linear-gradient(115deg,#d9edf2 0%,#e4def7 48%,#f7d9cf 100%);box-shadow:0 14px 35px #547d8a12}
+.lj-breathe-card:before{content:"";position:absolute;width:260px;height:260px;right:9%;top:-160px;border-radius:50%;border:1px solid #ffffffa6;box-shadow:0 0 0 22px #ffffff28,0 0 0 45px #ffffff1d;animation:lj-orbit-turn 35s linear infinite}
+.lj-breathe-copy h2{color:#304f5b;font-size:21px}.lj-breathe-copy p{color:#5e777d}.lj-breathe-copy .lj-kicker{color:#537c91}
+.lj-breathe-visual{z-index:1}.lj-breathe-orbit{border-color:#6f9da88a}.lj-breathe-visual .orbit-two{border-color:#a48ccf99}
+.lj-breathe-circle{border-color:#ffffff;background:radial-gradient(circle at 30% 20%,#fff9df,#c4e5e5 55%,#cfc0f0);color:#416e75;box-shadow:0 10px 30px #537f8a2c}
+.lj-stats{gap:15px}
+.lj-stat{position:relative;overflow:hidden;min-height:116px;border-radius:20px;border-color:#ffffff;background:#fffdf3d9;box-shadow:0 12px 28px #625c4d0b}
+.lj-stat:after{content:"";position:absolute;right:-30px;bottom:-42px;width:115px;height:115px;border-radius:50%;background:var(--stat-orb,#d9ebdb);opacity:.68;transition:transform .45s ease}
+.lj-stat:nth-child(1){--stat-orb:#c8e8d4;background:linear-gradient(130deg,#fffdf4,#e1f1e2)}
+.lj-stat:nth-child(2){--stat-orb:#f5c9ad;background:linear-gradient(130deg,#fff9ef,#f8dfd0)}
+.lj-stat:nth-child(3){--stat-orb:#d7c5f0;background:linear-gradient(130deg,#fffdf5,#e9e0f7)}
+.lj-stat:hover:after{transform:scale(1.22)}
+.lj-stat-icon{position:relative;z-index:1;box-shadow:0 6px 16px #5a5d4d0b}
+.lj-stat-icon.sage{background:#cfe9d6;color:#3d7860}.lj-stat-icon.peach{background:#f7d5c1;color:#a76147}.lj-stat-icon.lilac{background:#dfd2f3;color:#785b9e}
+.lj-stat>div{position:relative;z-index:1}.lj-stat small{color:#71877b}.lj-stat strong{color:#2f4b41}.lj-stat p{color:#73847a}
+.lj-layout{gap:20px}
+.lj-card{border-color:#e7e1d5;background:#fffdf9ed;box-shadow:0 14px 35px #4e4b3b0a}
+.lj-composer{background:linear-gradient(160deg,#fffdf8 0%,#f0f7ef 100%);border-color:#d7e7d9}
+.lj-composer .lj-heading-flower{background:linear-gradient(135deg,#f5d9ca,#ded1f2);color:#8b6b82;animation:lj-gentle-float 5s ease-in-out infinite}
+.lj-section-heading h2{color:#2d443b}.lj-section-heading p{color:#75857a}
+.lj-prompts button{border-color:#dce8d9;background:#f7fbf3;color:#587264}
+.lj-prompts button:nth-child(2n){border-color:#e9d9e7;background:#fcf4fb;color:#856786}
+.lj-prompts button:nth-child(3n){border-color:#f0dfc2;background:#fff9e8;color:#8c7445}
+.lj-prompts button:hover{background:#e4f2e4;border-color:#b9d8bd}
+.lj-composer textarea{border-color:#dce8dc;background:#fffef9}
+.lj-composer textarea:focus{border-color:#8db7a2;box-shadow:0 0 0 4px #d8ebdf8a}
+.lj-privacy{border-top-color:#e6e8db}.lj-privacy>span{color:#9b7cb2}
+.lj-archive{position:relative;overflow:hidden;background:linear-gradient(155deg,#fffdf9 0%,#f4effb 100%);border-color:#e1d9ef}
+.lj-archive:before{content:"";position:absolute;top:-90px;right:-75px;width:180px;height:180px;border-radius:50%;background:#e1d4f35c;pointer-events:none}
+.lj-archive>*{position:relative}
+.lj-count{border-color:#d7c9eb;background:#eee7f8;color:#775d99}
+.lj-search{border-color:#e3dcef;background:#fffdfb}.lj-search:focus-within{border-color:#b6a0d5;box-shadow:0 0 0 3px #e8dff6}
+.lj-filters select{border-color:#e4dbee;background:#faf7ff}
+.lj-entry{border-color:#e8e0f0;background:#fffefa}
+.lj-entry:nth-child(3n+1){--entry-accent:#6e9f8b;--entry-tint:#e9f5ec}
+.lj-entry:nth-child(3n+2){--entry-accent:#b87c65;--entry-tint:#fff0e8}
+.lj-entry:nth-child(3n){--entry-accent:#9278b5;--entry-tint:#f1eafb}
+.lj-entry:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--entry-accent);opacity:.8;transform:scaleY(.22);transform-origin:center;transition:transform .3s ease}
+.lj-entry:hover:before,.lj-entry.selected:before{transform:scaleY(1)}
+.lj-entry:hover,.lj-entry.selected{border-color:#c9b9e0;background:linear-gradient(100deg,var(--entry-tint,#f7f4fc),#fffefa 70%);box-shadow:0 8px 22px #6d5b8b12}
+.lj-entry-link{color:var(--entry-accent,#668d78)}
+.lj-entry-actions button{border-color:#e7e0ed;background:#fffdfb}
+.lj-mood-pill.positive{background:#e2f3e4;color:#427859}.lj-mood-pill.negative{background:#fde7e1;color:#a95f52}.lj-mood-pill.neutral{background:#eee5fb;color:#7c5da2}
+.lj-detail{background:linear-gradient(155deg,#fffdf9,#f2f8f0)}
+.lj-mood-banner.positive{background:#edf7e9;border-color:#d4e8cd}.lj-mood-banner.negative{background:#fff0e9;border-color:#f0d6ca}.lj-mood-banner.neutral{background:#f1eafa;border-color:#e0d4ef}
+.lj-intensity-track{background:#e9e7df}.lj-intensity-track span{background:linear-gradient(90deg,#82c4a1,#efc47d,#e8958e,#b69bdc)}
+.lj-theme-list span{border-color:#e0d3f0;background:#f3ecfb;color:#7c659b}
+.lj-gentle-response{border-color:#d8e8d7;background:linear-gradient(110deg,#eaf6e8,#f8f3e8)}
+.lj-next-step{border-left-color:#e7b07f;background:#fff4e5}
+.lj-bottom-reminder{position:relative;overflow:hidden;border-color:#ead8ca;background:linear-gradient(105deg,#f6d9d0 0%,#f6e7b7 36%,#dcefe2 70%,#e6d9f6 100%);box-shadow:0 14px 35px #705c4b10}
+.lj-bottom-reminder:after{content:"";position:absolute;right:12%;top:-90px;width:180px;height:180px;border:1px solid #ffffff9c;border-radius:50%;box-shadow:0 0 0 18px #ffffff24,0 0 0 38px #ffffff19;animation:lj-orbit-turn 40s linear infinite}
+.lj-reminder-icon{position:relative;z-index:1;background:#fffdf0;color:#ba7b58}
+.lj-bottom-reminder>div,.lj-reminder-flower{position:relative;z-index:1}
+.lj-bottom-reminder .lj-kicker{color:#9b6955}.lj-bottom-reminder h2{color:#3d4b40}.lj-bottom-reminder p{color:#6d7c6e}
+.lj-reminder-flower{color:#7b9d7e;animation:lj-flower-drift 6s ease-in-out infinite}
+.lj-footer{color:#89968a}.lj-footer span:first-child{color:#4b6b5b}
+.lj-feedback-toast{border-color:#d5e7d6;background:linear-gradient(120deg,#eaf7e9,#fff6d9 65%,#f4e7fb)}
+.lj-feedback-toast.negative{border-color:#efd5ca;background:linear-gradient(120deg,#fff1e9,#f6eaf8)}
+.lj-feedback-toast.neutral{border-color:#e2d7ef;background:linear-gradient(120deg,#f1f7e8,#f4eafa)}
+.lj-modal-backdrop{background:#243d3aa3}.lj-modal{border-color:#e7dcca;background:linear-gradient(145deg,#fffdf7,#f1f7ee)}
+.lj-modal-symbol{background:#f8dfd7;color:#a85e53}
+.lj-message.error{border-color:#efcec5;background:#fff0eb}.lj-message.success{border-color:#cde4ce;background:#edf8eb}
+.lj-motion-ready .lj-reveal:not(.is-visible){opacity:0;transform:translateY(28px) scale(.985);filter:blur(3px)}
+.lj-reveal{transition:opacity .75s ease,transform .85s cubic-bezier(.2,.75,.2,1),filter .75s ease;transition-delay:var(--reveal-delay,0ms)}
+.lj-reveal.is-visible{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}
+.lj-hero.is-visible .lj-art-flower{animation:lj-flower-drift 6s ease-in-out infinite,lj-glow-pulse 4s ease-in-out infinite}
+.lj-stat.is-visible{animation:lj-card-pop .65s cubic-bezier(.2,.8,.2,1) both}
+.lj-entry{animation:lj-entry-arrive .55s both}.lj-entry:nth-child(2n){--entry-index:1}.lj-entry:nth-child(3n){--entry-index:2}
+@keyframes lj-orbit-turn{to{transform:rotate(360deg)}}
+@keyframes lj-cloud-drift{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(-16px,12px,0)}}
+@keyframes lj-sun-bloom{0%,100%{transform:scale(.94);opacity:.75}50%{transform:scale(1.08);opacity:1}}
+@keyframes lj-glow-pulse{0%,100%{box-shadow:0 20px 45px #966d8050,0 0 0 0 #eac5c666}50%{box-shadow:0 20px 45px #966d8050,0 0 0 13px #eac5c600}}
+@keyframes lj-card-pop{0%{opacity:.6;transform:translateY(12px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes lj-entry-arrive{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:900px){.lj-memory-rail{right:5px;opacity:.5}.lj-shell{padding-right:clamp(14px,4vw,52px)}}
+@media(max-width:650px){
+ .lj-memory-rail{display:none}.lj-hero{min-height:unset;background:linear-gradient(145deg,#dff0e3,#f8e5c8 48%,#f1d6e9 100%)}
+ .lj-hero h1{font-size:clamp(31px,9vw,40px);letter-spacing:-1.6px}
+ .lj-art-ring.ring-a{width:150px;height:150px}.lj-art-ring.ring-b{width:190px;height:100px}.lj-art-note{right:0;max-width:190px}
+ .lj-breathe-card:before{right:-15%;top:-120px}.lj-stat{min-height:90px}.lj-entry:before{width:2px}.lj-bottom-reminder:after{right:-20%;top:-65px}
+}
+@media(prefers-reduced-motion:reduce){
+ .lj-memory-mote,.lj-sun-glow,.lj-art-ring,.lj-art-flower,.lj-hero:before,.lj-hero:after,.lj-breathe-card:before,.lj-bottom-reminder:after,.lj-stat,.lj-entry{animation:none!important}
+ .lj-reveal,.lj-motion-ready .lj-reveal:not(.is-visible){opacity:1!important;transform:none!important;filter:none!important;transition:none!important}
+ .lj-memory-mote{transition:none!important}
+}
+
 `;
