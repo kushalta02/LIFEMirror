@@ -24,6 +24,7 @@ from database import (
     insights_collection,
     chat_collection,
     conversations_collection,
+    memory_collection,
 )
 
 from services.ai_service_chat import generate_response

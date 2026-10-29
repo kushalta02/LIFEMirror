@@ -336,13 +336,97 @@ const styles = `
 .lm-new-chat{flex-shrink:0;padding:8px 10px;border:1px solid #80e6c044;border-radius:10px;color:#d8f3e5;background:#80e6c012;font-size:10px;font-weight:700;cursor:pointer}
 .lm-new-chat:hover:not(:disabled){background:#80e6c021;border-color:#80e6c077}
 .lm-new-chat:disabled{opacity:.45;cursor:not-allowed}
-.lm-history-list{display:flex;flex-direction:column;gap:5px;max-height:225px;overflow:auto;scrollbar-width:thin;scrollbar-color:#42564d transparent}
+.lm-history-list{display:flex;flex-direction:column;gap:11px;max-height:280px;overflow:auto;scrollbar-width:thin;scrollbar-color:#42564d transparent}
+.lm-history-group{display:flex;flex-direction:column;gap:4px}
+.lm-history-group-title{padding:3px 10px;color:#80978a;font-size:9px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase}
 .lm-history-item{display:flex;align-items:center;gap:9px;width:100%;min-width:0;padding:9px 10px;border:1px solid transparent;border-radius:10px;text-align:left;color:#bdcbc2;background:transparent;cursor:pointer}
 .lm-history-item:hover:not(:disabled),.lm-history-item.is-active{border-color:#80e6c026;background:#80e6c00c;color:#e6f4ea}
 .lm-history-item:disabled{opacity:.55;cursor:wait}
 .lm-history-item-icon{flex:0 0 auto;color:#9ed9b6;font-size:12px}
 .lm-history-item-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:1.5}
 .lm-history-empty{margin:0;color:#92a79a;font-size:11px;line-height:1.7}
+
+
+/* Viewport-fit layout: only the message transcript and history list scroll. */
+.lm-chat{height:100vh;height:100dvh;min-height:0;padding:12px;overflow:hidden}
+.lm-frame{height:calc(100vh - 24px);height:calc(100dvh - 24px);min-height:0;display:flex;flex-direction:column}
+.lm-header{height:72px;min-height:72px;flex:0 0 72px;padding:0 24px}
+.lm-layout{flex:1;min-height:0;height:auto;grid-template-columns:minmax(0,1fr) 310px;overflow:hidden}
+.lm-chat-panel{height:100%;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.lm-scroll-area{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:18px clamp(18px,3vw,36px) 16px}
+.lm-composer-area{flex:0 0 auto;padding:12px clamp(14px,2.5vw,28px) 13px}
+.lm-composer textarea{resize:none;max-height:120px;overflow-y:auto}
+.lm-compose-hint{margin-top:7px}
+.lm-sidebar{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:17px 16px;gap:16px;scrollbar-width:thin}
+.lm-history-list{max-height:none;min-height:0;overflow:visible}
+.lm-welcome{min-height:0;height:auto;max-width:820px;margin:0 auto;padding:clamp(22px,3vh,34px) clamp(22px,3vw,38px)}
+.lm-welcome h1{font-size:clamp(29px,3vw,42px);margin:13px 0 10px}
+.lm-welcome-copy{line-height:1.75}
+.lm-companion-art{width:220px;height:225px;right:2%;top:20px;transform:scale(.85);transform-origin:top right}
+.lm-welcome-inner{max-width:62%;position:relative;z-index:2}
+.lm-welcome-actions{margin-top:18px;gap:9px;flex-wrap:wrap}
+.lm-safety-note{margin-top:15px}
+.lm-mobile-history-toggle{display:none;align-items:center;gap:6px;padding:8px 10px;border:1px solid #ffffff20;border-radius:10px;color:#d9f3e6;background:#80e6c010;font-size:11px;font-weight:700;cursor:pointer}
+@media(max-height:760px) and (min-width:801px){
+ .lm-header{height:62px;min-height:62px;flex-basis:62px}
+ .lm-scroll-area{padding-top:12px;padding-bottom:10px}
+ .lm-welcome{padding-top:18px;padding-bottom:18px}
+ .lm-companion-art{transform:scale(.68);top:8px}
+ .lm-welcome h1{font-size:clamp(27px,2.7vw,36px);margin:8px 0}
+ .lm-welcome-copy{font-size:11px;line-height:1.6}
+ .lm-welcome-actions{margin-top:12px}
+ .lm-safety-note{margin-top:10px}
+ .lm-sidebar{padding-top:12px;padding-bottom:12px;gap:11px}
+ .lm-history-panel{padding:11px}
+ .lm-starter-list{gap:7px}
+ .lm-starter{padding:9px;min-height:0}
+ .lm-checkin{padding-top:0}
+ .lm-reminder{margin-top:0}
+}
+@media(max-width:800px){
+ .lm-chat{padding:0}
+ .lm-frame{height:100vh;height:100dvh;min-height:0;border-radius:0;border:0}
+ .lm-header{height:64px;min-height:64px;flex-basis:64px;padding:0 12px}
+ .lm-layout{display:block;position:relative;min-height:0;height:auto;flex:1;overflow:hidden}
+ .lm-chat-panel{height:100%;min-height:0;width:100%;border:0}
+ .lm-scroll-area{min-height:0;padding:14px 14px 12px}
+ .lm-composer-area{padding:10px 12px max(10px, env(safe-area-inset-bottom))}
+ .lm-compose-hint{font-size:9px}
+ .lm-mobile-history-toggle{display:inline-flex}
+ .lm-header-right{gap:7px}
+ .lm-private-pill{padding:7px 8px;font-size:9px}
+ .lm-dashboard-return{padding:7px 9px;font-size:10px}
+ .lm-sidebar{display:none;position:absolute;z-index:10;top:8px;left:8px;right:8px;bottom:8px;width:auto;height:auto;min-height:0;overflow-y:auto;padding:13px;border:1px solid #ffffff1c;border-radius:17px;background:rgba(17,22,27,.98);box-shadow:0 18px 60px #0009;backdrop-filter:blur(18px)}
+ .lm-sidebar.is-open{display:flex;flex-direction:column}
+ .lm-sidebar>div:not(.lm-history-panel),.lm-sidebar>.lm-side-divider,.lm-sidebar>.lm-reminder,.lm-sidebar>.lm-reset{display:none}
+ .lm-history-panel{padding:13px}
+ .lm-history-list{max-height:calc(100dvh - 210px);overflow-y:auto}
+ .lm-welcome{min-height:0;margin:auto 0;padding:20px 18px;border-radius:18px}
+ .lm-welcome-inner{max-width:100%}
+ .lm-welcome h1{font-size:clamp(29px,7vw,39px);margin:12px 0}
+ .lm-welcome-copy{max-width:440px;font-size:12px;line-height:1.75}
+ .lm-companion-art{width:160px;height:170px;right:-26px;top:0;transform:scale(.68);opacity:.3}
+ .lm-welcome-actions{margin-top:15px}
+ .lm-safety-note{margin-top:12px}
+}
+@media(max-width:430px){
+ .lm-brand-sub{font-size:7px;letter-spacing:.7px}
+ .lm-brand-name{font-size:15px}
+ .lm-header-right{gap:5px}
+ .lm-header-caption{display:none}
+ .lm-mobile-history-toggle{padding:7px 8px;font-size:10px}
+ .lm-dashboard-return{padding:7px 8px;font-size:9px}
+ .lm-private-pill{padding:7px 7px;font-size:8px}
+ .lm-scroll-area{padding:10px 9px}
+ .lm-welcome{padding:17px 14px}
+ .lm-welcome h1{font-size:30px}
+ .lm-welcome-copy{font-size:11px}
+ .lm-action-primary,.lm-action-secondary{padding:10px 11px;font-size:10px}
+ .lm-safety-note{font-size:9px}
+ .lm-composer{gap:7px;padding:7px 7px 7px 11px}
+ .lm-composer textarea{min-height:39px;font-size:12px}
+ .lm-send{width:38px;height:38px;flex-basis:38px}
+}
 
 `;
 
@@ -353,7 +437,9 @@ export default function Chatbox() {
   const [error, setError] = useState("");
   const [conversations, setConversations] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const bottomRef = useRef(null);
+  const scrollAreaRef = useRef(null);
   const inputRef = useRef(null);
   const conversationRef = useRef(null);
   const loadingRef = useRef(false);
@@ -593,6 +679,7 @@ export default function Chatbox() {
 
   async function startFreshConversation() {
     if (loadingRef.current) return;
+    setHistoryOpen(false);
     setError("");
     setHistoryLoading(true);
     try {
@@ -603,6 +690,36 @@ export default function Chatbox() {
       setHistoryLoading(false);
       inputRef.current?.focus();
     }
+  }
+
+  function getConversationGroups(items) {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000;
+    const startOfWeek = startOfToday - 7 * 24 * 60 * 60 * 1000;
+    const groups = [
+      { title: "Today", items: [] },
+      { title: "Yesterday", items: [] },
+      { title: "Previous 7 days", items: [] },
+      { title: "Older", items: [] },
+    ];
+
+    for (const item of items) {
+      const rawDate = item.updated_at || item.created_at || item.updatedAt || item.createdAt;
+      const time = rawDate ? new Date(rawDate).getTime() : NaN;
+      if (!Number.isFinite(time)) {
+        groups[3].items.push(item);
+      } else if (time >= startOfToday) {
+        groups[0].items.push(item);
+      } else if (time >= startOfYesterday) {
+        groups[1].items.push(item);
+      } else if (time >= startOfWeek) {
+        groups[2].items.push(item);
+      } else {
+        groups[3].items.push(item);
+      }
+    }
+    return groups.filter((group) => group.items.length > 0);
   }
 
   function chooseMood(mood) {
@@ -634,6 +751,7 @@ export default function Chatbox() {
             </div>
           </div>
           <div className="lm-header-right">
+            <button className="lm-mobile-history-toggle" type="button" onClick={() => setHistoryOpen((open) => !open)} aria-expanded={historyOpen}><span aria-hidden="true">☷</span> History</button>
             <button className="lm-dashboard-return" type="button" onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign("/dashboard"); }} aria-label="Return to dashboard"><span aria-hidden="true">←</span> Dashboard</button>
             <span className="lm-header-caption">A moment for you</span>
             <div className="lm-private-pill"><span className="lm-live-dot" />Here with you</div>
@@ -642,7 +760,7 @@ export default function Chatbox() {
 
         <div className="lm-layout">
           <section className="lm-chat-panel" aria-label="LifeMirror conversation">
-            <div className="lm-scroll-area" ref={conversationRef}>
+            <div className="lm-scroll-area" ref={scrollAreaRef}>
               {messages.length === 0 ? (
                 <div className="lm-welcome">
                   <div className="lm-companion-art" aria-label="A softly animated cozy window with sunrise and a growing plant">
@@ -734,7 +852,7 @@ export default function Chatbox() {
             </div>
           </section>
 
-          <aside className="lm-sidebar" aria-label="Conversation history, ideas and gentle reminders">
+          <aside className={`lm-sidebar ${historyOpen ? "is-open" : ""}`} aria-label="Conversation history, ideas and gentle reminders">
             <div className="lm-history-panel">
               <div className="lm-history-heading">
                 <div>
@@ -751,18 +869,23 @@ export default function Chatbox() {
                 <p className="lm-history-empty">Your conversations will appear here.</p>
               ) : (
                 <div className="lm-history-list">
-                  {conversations.map((item) => (
-                    <button
-                      type="button"
-                      key={item.conversation_id}
-                      className={`lm-history-item ${item.conversation_id === conversationRef.current ? "is-active" : ""}`}
-                      onClick={() => loadConversation(item.conversation_id)}
-                      disabled={loading || historyLoading}
-                      title={item.title || "New chat"}
-                    >
-                      <span className="lm-history-item-icon" aria-hidden="true">↗</span>
-                      <span className="lm-history-item-title">{item.title || "New chat"}</span>
-                    </button>
+                  {getConversationGroups(conversations).map((group) => (
+                    <div className="lm-history-group" key={group.title}>
+                      <div className="lm-history-group-title">{group.title}</div>
+                      {group.items.map((item) => (
+                        <button
+                          type="button"
+                          key={item.conversation_id}
+                          className={`lm-history-item ${item.conversation_id === conversationRef.current ? "is-active" : ""}`}
+                          onClick={() => { loadConversation(item.conversation_id); setHistoryOpen(false); }}
+                          disabled={loading || historyLoading}
+                          title={item.title || "New chat"}
+                        >
+                          <span className="lm-history-item-icon" aria-hidden="true">↗</span>
+                          <span className="lm-history-item-title">{item.title || "New chat"}</span>
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}
