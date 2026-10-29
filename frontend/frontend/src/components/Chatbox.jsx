@@ -329,6 +329,21 @@ const styles = `
 @media(max-width:800px){.lm-header-right{gap:8px}.lm-header-caption{display:none}.lm-dashboard-return{padding:8px 10px}.lm-companion-art{right:-10px;top:20px;transform:scale(.72);opacity:.82}.lm-welcome-inner{max-width:420px}}
 @media(max-width:500px){.lm-header-right{gap:6px}.lm-dashboard-return{padding:7px 8px;font-size:9px}.lm-companion-art{right:-76px;top:2px;transform:scale(.68);opacity:.34}.lm-welcome-inner{max-width:100%}.lm-welcome h1,.lm-welcome-copy,.lm-welcome-actions,.lm-safety-note{position:relative;z-index:2}}
 @media(prefers-reduced-motion:reduce){.lm-companion-art *{animation:none!important}}
+
+.lm-history-panel{padding:15px;border:1px solid #ffffff12;border-radius:16px;background:linear-gradient(145deg,#ffffff07,#ffffff02)}
+.lm-history-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.lm-history-title{margin:0;color:#edf4ef;font:800 17px/1.3 'Manrope',sans-serif;letter-spacing:-.45px}
+.lm-new-chat{flex-shrink:0;padding:8px 10px;border:1px solid #80e6c044;border-radius:10px;color:#d8f3e5;background:#80e6c012;font-size:10px;font-weight:700;cursor:pointer}
+.lm-new-chat:hover:not(:disabled){background:#80e6c021;border-color:#80e6c077}
+.lm-new-chat:disabled{opacity:.45;cursor:not-allowed}
+.lm-history-list{display:flex;flex-direction:column;gap:5px;max-height:225px;overflow:auto;scrollbar-width:thin;scrollbar-color:#42564d transparent}
+.lm-history-item{display:flex;align-items:center;gap:9px;width:100%;min-width:0;padding:9px 10px;border:1px solid transparent;border-radius:10px;text-align:left;color:#bdcbc2;background:transparent;cursor:pointer}
+.lm-history-item:hover:not(:disabled),.lm-history-item.is-active{border-color:#80e6c026;background:#80e6c00c;color:#e6f4ea}
+.lm-history-item:disabled{opacity:.55;cursor:wait}
+.lm-history-item-icon{flex:0 0 auto;color:#9ed9b6;font-size:12px}
+.lm-history-item-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;line-height:1.5}
+.lm-history-empty{margin:0;color:#92a79a;font-size:11px;line-height:1.7}
+
 `;
 
 export default function Chatbox() {
@@ -336,9 +351,12 @@ export default function Chatbox() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [conversations, setConversations] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
   const conversationRef = useRef(null);
+  const loadingRef = useRef(false);
 
   let user = {};
   try {
@@ -348,110 +366,243 @@ export default function Chatbox() {
   }
 
   const firstName = (user.name || user.full_name || "").trim().split(" ")[0];
-  const email = user.email || "guest";
+  const email = typeof user.email === "string" ? user.email : "guest";
+  const token =
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("access_token");
+
+  function authHeaders(json = false) {
+    return {
+      ...(json ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+  }
+
+  async function readResponse(response, fallbackMessage) {
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      throw new Error("Your session has expired. Please log in again.");
+    }
+    if (!response.ok) {
+      throw new Error(
+        typeof data.detail === "string"
+          ? data.detail
+          : `${fallbackMessage} (${response.status}).`
+      );
+    }
+    return data;
+  }
+
+  async function fetchConversationList() {
+    if (!token) {
+      setError("Your session has expired. Please log in again.");
+      setHistoryLoading(false);
+      return [];
+    }
+
+    const response = await fetch(`${API_URL}/chat/conversations`, {
+      headers: authHeaders(),
+    });
+    const data = await readResponse(response, "Could not load conversations");
+    const items = Array.isArray(data.conversations) ? data.conversations : [];
+    setConversations(items);
+    return items;
+  }
+
+  async function loadConversation(conversationId) {
+    if (!token || typeof conversationId !== "string" || !conversationId) return;
+
+    setHistoryLoading(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `${API_URL}/chat/history?conversation_id=${encodeURIComponent(conversationId)}`,
+        { headers: authHeaders() }
+      );
+      const data = await readResponse(response, "Could not load chat history");
+      conversationRef.current = data.conversation_id || conversationId;
+      const safeMessages = Array.isArray(data.messages)
+        ? data.messages
+            .filter(
+              (item) =>
+                item &&
+                (item.role === "user" || item.role === "assistant") &&
+                typeof item.text === "string"
+            )
+            .map((item) => ({ role: item.role, text: item.text }))
+        : [];
+      setMessages(safeMessages);
+      setInput("");
+    } catch (err) {
+      setError(err.message || "Could not load this conversation.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function createConversation() {
+    if (!token) {
+      throw new Error("Your session has expired. Please log in again.");
+    }
+    const response = await fetch(`${API_URL}/chat/conversations`, {
+      method: "POST",
+      headers: authHeaders(true),
+      body: JSON.stringify({}),
+    });
+    const data = await readResponse(response, "Could not create a new conversation");
+    if (typeof data.conversation_id !== "string" || !data.conversation_id) {
+      throw new Error("LifeMirror couldn't create a conversation. Please try again.");
+    }
+    conversationRef.current = data.conversation_id;
+    setMessages([]);
+    setInput("");
+    setError("");
+    setConversations((previous) => [
+      data,
+      ...previous.filter((item) => item.conversation_id !== data.conversation_id),
+    ]);
+    return data.conversation_id;
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, loading]);
 
-  
-async function sendMessage(text = input) {
-  const message = text.trim();
-  if (!message || loading) return;
+  useEffect(() => {
+    let cancelled = false;
 
-  const token =
-    sessionStorage.getItem("access_token") ||
-    localStorage.getItem("access_token");
-
-  if (!token) {
-    setError("Your session has expired. Please log in again.");
-    return;
-  }
-
-  setError("");
-  setInput("");
-  setMessages((previous) => [
-    ...previous,
-    { role: "user", text: message },
-  ]);
-  setLoading(true);
-
-  try {
-    let mood = localStorage.getItem("mood") || "neutral";
-
-    try {
-      const parsedMood = JSON.parse(mood);
-      if (typeof parsedMood === "string") mood = parsedMood;
-    } catch {
-      // Keep the existing mood value.
+    async function initialiseChat() {
+      if (!token) {
+        setError("Your session has expired. Please log in again.");
+        setHistoryLoading(false);
+        return;
+      }
+      try {
+        const items = await fetchConversationList();
+        if (cancelled) return;
+        if (items.length > 0) {
+          await loadConversation(items[0].conversation_id);
+        } else {
+          await createConversation();
+          if (!cancelled) setHistoryLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Could not open LifeMirror chat.");
+          setHistoryLoading(false);
+        }
+      }
     }
 
-    const response = await fetch(`${API_URL}/chat`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
+    initialiseChat();
+    return () => {
+      cancelled = true;
+    };
+    // Token is read from browser storage on mount; route remount handles account changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function sendMessage(text = input) {
+    // Never let a React event, DOM node, or other object reach JSON.stringify().
+    const message = typeof text === "string" ? text.trim() : "";
+    if (!message || loadingRef.current) return;
+
+    if (!token) {
+      setError("Your session has expired. Please log in again.");
+      return;
+    }
+
+    loadingRef.current = true;
+    setError("");
+    setInput("");
+    setMessages((previous) => [...previous, { role: "user", text: message }]);
+    setLoading(true);
+
+    try {
+      let conversationId = conversationRef.current;
+      if (typeof conversationId !== "string" || !conversationId) {
+        conversationId = await createConversation();
+      }
+
+      let mood = localStorage.getItem("mood") || "neutral";
+      try {
+        const parsedMood = JSON.parse(mood);
+        if (typeof parsedMood === "string") mood = parsedMood;
+      } catch {
+        // Keep the original string mood.
+      }
+      if (typeof mood !== "string") mood = "neutral";
+
+      const payload = {
         message,
         mood,
         email,
-        ...(conversationRef.current
-          ? { conversation_id: conversationRef.current }
-          : {}),
-      }),
-    });
+        conversation_id: conversationId,
+      };
 
-    const data = await response.json().catch(() => ({}));
+      const response = await fetch(`${API_URL}/chat`, {
+        method: "POST",
+        headers: authHeaders(true),
+        body: JSON.stringify(payload),
+      });
 
-    if (response.status === 401) {
-      throw new Error("Your session has expired. Please log in again.");
-    }
+      const data = await readResponse(response, "LifeMirror couldn't respond");
+      if (typeof data.reply !== "string" || !data.reply.trim()) {
+        throw new Error("LifeMirror couldn't respond just now. Please try again.");
+      }
 
-    if (!response.ok) {
-      throw new Error(
-        typeof data.detail === "string"
-          ? data.detail
-          : `LifeMirror couldn't respond (${response.status}). Please try again.`
+      if (typeof data.conversation_id === "string") {
+        conversationRef.current = data.conversation_id;
+      }
+
+      setMessages((previous) => [
+        ...previous,
+        { role: "assistant", text: data.reply },
+      ]);
+
+      // Refresh titles/order after the message is saved.
+      try {
+        await fetchConversationList();
+      } catch {
+        // The reply is already saved; a history refresh can be retried later.
+      }
+    } catch (err) {
+      // Remove the optimistic user message if the request failed.
+      setMessages((previous) => {
+        const last = previous[previous.length - 1];
+        return last?.role === "user" && last.text === message
+          ? previous.slice(0, -1)
+          : previous;
+      });
+      setError(
+        err.message === "Failed to fetch"
+          ? "I can't reach LifeMirror right now. Please check that your backend is running."
+          : err.message || "Something went wrong. Please try again."
       );
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
+      window.setTimeout(() => inputRef.current?.focus(), 50);
     }
-
-    if (!data.reply) {
-      throw new Error("LifeMirror couldn't respond just now. Please try again.");
-    }
-
-    if (data.conversation_id) {
-      conversationRef.current = data.conversation_id;
-    }
-
-    setMessages((previous) => [
-      ...previous,
-      { role: "assistant", text: data.reply },
-    ]);
-  } catch (err) {
-    setError(
-      err.message === "Failed to fetch"
-        ? "I can't reach LifeMirror right now. Please check that your backend is running."
-        : err.message || "Something went wrong. Please try again."
-    );
-  } finally {
-    setLoading(false);
-    window.setTimeout(() => inputRef.current?.focus(), 50);
   }
-}
-
 
   function handleSubmit(event) {
     event.preventDefault();
-    sendMessage();
+    sendMessage(input);
   }
 
-  function startFreshConversation() {
-    if (loading) return;
-    setMessages([]);
-    setInput("");
+  async function startFreshConversation() {
+    if (loadingRef.current) return;
     setError("");
-    inputRef.current?.focus();
+    setHistoryLoading(true);
+    try {
+      await createConversation();
+    } catch (err) {
+      setError(err.message || "Could not start a new conversation.");
+    } finally {
+      setHistoryLoading(false);
+      inputRef.current?.focus();
+    }
   }
 
   function chooseMood(mood) {
@@ -566,7 +717,7 @@ async function sendMessage(text = input) {
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault();
-                      handleSubmit(event);
+                      sendMessage(input);
                     }
                   }}
                   placeholder="I'm listening... what's on your mind?"
@@ -583,7 +734,39 @@ async function sendMessage(text = input) {
             </div>
           </section>
 
-          <aside className="lm-sidebar" aria-label="Conversation ideas and gentle reminders">
+          <aside className="lm-sidebar" aria-label="Conversation history, ideas and gentle reminders">
+            <div className="lm-history-panel">
+              <div className="lm-history-heading">
+                <div>
+                  <div className="lm-side-label">Your space</div>
+                  <h2 className="lm-history-title">Conversations</h2>
+                </div>
+                <button type="button" className="lm-new-chat" onClick={startFreshConversation} disabled={loading || historyLoading}>
+                  + New chat
+                </button>
+              </div>
+              {historyLoading ? (
+                <p className="lm-history-empty">Opening your conversations…</p>
+              ) : conversations.length === 0 ? (
+                <p className="lm-history-empty">Your conversations will appear here.</p>
+              ) : (
+                <div className="lm-history-list">
+                  {conversations.map((item) => (
+                    <button
+                      type="button"
+                      key={item.conversation_id}
+                      className={`lm-history-item ${item.conversation_id === conversationRef.current ? "is-active" : ""}`}
+                      onClick={() => loadConversation(item.conversation_id)}
+                      disabled={loading || historyLoading}
+                      title={item.title || "New chat"}
+                    >
+                      <span className="lm-history-item-icon" aria-hidden="true">↗</span>
+                      <span className="lm-history-item-title">{item.title || "New chat"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div>
               <div className="lm-side-label">A gentle place to begin</div>
               <h2 className="lm-side-title">You don't have to carry it all by yourself.</h2>
