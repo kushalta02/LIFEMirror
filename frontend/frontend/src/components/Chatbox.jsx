@@ -354,54 +354,92 @@ export default function Chatbox() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, loading]);
 
-  async function sendMessage(text = input) {
-    const message = text.trim();
-    if (!message || loading) return;
+  
+async function sendMessage(text = input) {
+  const message = text.trim();
+  if (!message || loading) return;
 
-    setError("");
-    setInput("");
-    setMessages((previous) => [...previous, { role: "user", text: message }]);
-    setLoading(true);
+  const token =
+    sessionStorage.getItem("access_token") ||
+    localStorage.getItem("access_token");
+
+  if (!token) {
+    setError("Your session has expired. Please log in again.");
+    return;
+  }
+
+  setError("");
+  setInput("");
+  setMessages((previous) => [
+    ...previous,
+    { role: "user", text: message },
+  ]);
+  setLoading(true);
+
+  try {
+    let mood = localStorage.getItem("mood") || "neutral";
 
     try {
-      let mood = localStorage.getItem("mood") || "neutral";
-      try {
-        const parsedMood = JSON.parse(mood);
-        if (typeof parsedMood === "string") mood = parsedMood;
-      } catch {
-        // Keep the original mood value if it isn't JSON.
-      }
-
-      const response = await fetch(`${API_URL}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, mood, email }),
-      });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(
-          typeof data.detail === "string"
-            ? data.detail
-            : `LifeMirror couldn't respond (${response.status}). Please try again.`
-        );
-      }
-      if (!data.reply) {
-        throw new Error("I couldn't find the right words just now. Please try again.");
-      }
-
-      setMessages((previous) => [...previous, { role: "assistant", text: data.reply }]);
-    } catch (err) {
-      setError(
-        err.message === "Failed to fetch"
-          ? "I can't reach LifeMirror right now. Please check that your backend is running."
-          : err.message || "Something went wrong. Please try again."
-      );
-    } finally {
-      setLoading(false);
-      window.setTimeout(() => inputRef.current?.focus(), 50);
+      const parsedMood = JSON.parse(mood);
+      if (typeof parsedMood === "string") mood = parsedMood;
+    } catch {
+      // Keep the existing mood value.
     }
+
+    const response = await fetch(`${API_URL}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        message,
+        mood,
+        email,
+        ...(conversationRef.current
+          ? { conversation_id: conversationRef.current }
+          : {}),
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (response.status === 401) {
+      throw new Error("Your session has expired. Please log in again.");
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        typeof data.detail === "string"
+          ? data.detail
+          : `LifeMirror couldn't respond (${response.status}). Please try again.`
+      );
+    }
+
+    if (!data.reply) {
+      throw new Error("LifeMirror couldn't respond just now. Please try again.");
+    }
+
+    if (data.conversation_id) {
+      conversationRef.current = data.conversation_id;
+    }
+
+    setMessages((previous) => [
+      ...previous,
+      { role: "assistant", text: data.reply },
+    ]);
+  } catch (err) {
+    setError(
+      err.message === "Failed to fetch"
+        ? "I can't reach LifeMirror right now. Please check that your backend is running."
+        : err.message || "Something went wrong. Please try again."
+    );
+  } finally {
+    setLoading(false);
+    window.setTimeout(() => inputRef.current?.focus(), 50);
   }
+}
+
 
   function handleSubmit(event) {
     event.preventDefault();

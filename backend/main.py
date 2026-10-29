@@ -1,6 +1,6 @@
 import os
 import jwt
-
+from uuid import uuid4
 from datetime import datetime, timezone, timedelta
 from pwdlib import PasswordHash
 from fastapi import Depends
@@ -582,12 +582,185 @@ async def get_dashboard(
 
 
 
-# ---------------- CHAT ----------------
 
-from datetime import datetime, timezone
-from pymongo.errors import PyMongoError
+# ---------------- CHAT & CONVERSATIONS ----------------
 
 MAX_CHAT_HISTORY = 12
+
+
+def create_conversation(email_key: str, title: str = "New chat") -> dict:
+    now = datetime.now(timezone.utc)
+
+    conversation = {
+        "conversation_id": str(uuid4()),
+        "email": email_key,
+        "title": title,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    conversations_collection.insert_one(conversation)
+    return conversation
+
+
+def migrate_legacy_messages(email_key: str):
+    """Preserve old messages by grouping unassigned messages into one legacy chat."""
+    legacy_filter = {
+        "email": email_key,
+        "role": {"$in": ["user", "assistant"]},
+        "conversation_id": {"$exists": False},
+    }
+
+    if not chat_collection.find_one(legacy_filter):
+        return
+
+    now = datetime.now(timezone.utc)
+    conversation = create_conversation(email_key, "Previous conversation")
+
+    chat_collection.update_many(
+        legacy_filter,
+        {"$set": {"conversation_id": conversation["conversation_id"]}},
+    )
+
+    conversations_collection.update_one(
+        {"conversation_id": conversation["conversation_id"]},
+        {"$set": {"updated_at": now}},
+    )
+
+
+def get_latest_conversation(email_key: str) -> dict:
+    migrate_legacy_messages(email_key)
+
+    conversation = conversations_collection.find_one(
+        {"email": email_key},
+        sort=[("updated_at", -1)],
+    )
+
+    if not conversation:
+        conversation = create_conversation(email_key)
+
+    return conversation
+
+
+@app.post("/chat/conversations")
+async def create_new_conversation(
+    current_user: dict = Depends(get_current_user),
+):
+    email_key = current_user["email"].strip().lower()
+
+    try:
+        conversation = create_conversation(email_key)
+
+        return {
+            "conversation_id": conversation["conversation_id"],
+            "title": conversation["title"],
+            "created_at": conversation["created_at"].isoformat(),
+        }
+
+    except PyMongoError as exc:
+        import logging
+        logging.exception("Could not create conversation")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not create a new conversation",
+        ) from exc
+
+
+@app.get("/chat/conversations")
+async def list_conversations(
+    current_user: dict = Depends(get_current_user),
+):
+    email_key = current_user["email"].strip().lower()
+
+    try:
+        migrate_legacy_messages(email_key)
+
+        conversations = list(
+            conversations_collection.find(
+                {"email": email_key}
+            ).sort("updated_at", -1)
+        )
+
+        return {
+            "conversations": [
+                {
+                    "conversation_id": item["conversation_id"],
+                    "title": item.get("title", "New chat"),
+                    "created_at": item["created_at"].isoformat(),
+                    "updated_at": item["updated_at"].isoformat(),
+                }
+                for item in conversations
+            ]
+        }
+
+    except PyMongoError as exc:
+        import logging
+        logging.exception("Could not list conversations")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not load conversations",
+        ) from exc
+
+
+@app.get("/chat/history")
+async def get_chat_history(
+    conversation_id: str | None = None,
+    current_user: dict = Depends(get_current_user),
+):
+    email_key = current_user["email"].strip().lower()
+
+    try:
+        migrate_legacy_messages(email_key)
+
+        if conversation_id:
+            conversation = conversations_collection.find_one({
+                "conversation_id": conversation_id,
+                "email": email_key,
+            })
+
+            if not conversation:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Conversation not found",
+                )
+        else:
+            conversation = conversations_collection.find_one(
+                {"email": email_key},
+                sort=[("updated_at", -1)],
+            )
+
+        if not conversation:
+            return {"conversation_id": None, "messages": []}
+
+        saved_messages = list(
+            chat_collection.find({
+                "email": email_key,
+                "conversation_id": conversation["conversation_id"],
+                "role": {"$in": ["user", "assistant"]},
+            }).sort("_id", 1).limit(500)
+        )
+
+        return {
+            "conversation_id": conversation["conversation_id"],
+            "messages": [
+                {
+                    "role": item["role"],
+                    "text": item["content"],
+                }
+                for item in saved_messages
+                if isinstance(item.get("content"), str)
+            ],
+        }
+
+    except HTTPException:
+        raise
+    except PyMongoError as exc:
+        import logging
+        logging.exception("Could not load chat history")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not load chat history",
+        ) from exc
 
 
 @app.post("/chat")
@@ -605,23 +778,38 @@ async def chat(
         )
 
     try:
-        # Load this authenticated user's recent messages
-        saved_messages = list(
-            chat_collection.find(
-                {"email": email_key}
-            ).sort("_id", -1).limit(MAX_CHAT_HISTORY)
-        )
+        migrate_legacy_messages(email_key)
 
+        if data.conversation_id:
+            conversation = conversations_collection.find_one({
+                "conversation_id": data.conversation_id,
+                "email": email_key,
+            })
+
+            if not conversation:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Conversation not found",
+                )
+        else:
+            # Backward compatibility until the frontend sends conversation_id.
+            conversation = get_latest_conversation(email_key)
+
+        conversation_id = conversation["conversation_id"]
+
+        saved_messages = list(
+            chat_collection.find({
+                "email": email_key,
+                "conversation_id": conversation_id,
+                "role": {"$in": ["user", "assistant"]},
+            }).sort("_id", -1).limit(MAX_CHAT_HISTORY)
+        )
         saved_messages.reverse()
 
         history = [
-            {
-                "role": item["role"],
-                "content": item["content"],
-            }
+            {"role": item["role"], "content": item["content"]}
             for item in saved_messages
-            if item.get("role") in ("user", "assistant")
-            and isinstance(item.get("content"), str)
+            if isinstance(item.get("content"), str)
         ]
 
         reply = generate_response(
@@ -636,76 +824,58 @@ async def chat(
         chat_collection.insert_many([
             {
                 "email": email_key,
+                "conversation_id": conversation_id,
                 "role": "user",
                 "content": message,
                 "created_at": now,
             },
             {
                 "email": email_key,
+                "conversation_id": conversation_id,
                 "role": "assistant",
                 "content": reply,
                 "created_at": now,
             },
         ])
 
-        return {"reply": reply}
+        title = conversation.get("title", "New chat")
+        if title == "New chat":
+            title = message[:50] + ("..." if len(message) > 50 else "")
 
-    except PyMongoError:
+        conversations_collection.update_one(
+            {
+                "conversation_id": conversation_id,
+                "email": email_key,
+            },
+            {
+                "$set": {
+                    "updated_at": now,
+                    "title": title,
+                }
+            },
+        )
+
+        return {
+            "reply": reply,
+            "conversation_id": conversation_id,
+        }
+
+    except HTTPException:
+        raise
+    except PyMongoError as exc:
         import logging
         logging.exception("LifeMirror chat database operation failed")
         raise HTTPException(
             status_code=500,
             detail="Could not save or load chat history",
-        )
-
-    except Exception:
+        ) from exc
+    except Exception as exc:
         import logging
         logging.exception("LifeMirror chat generation failed")
         raise HTTPException(
             status_code=500,
             detail="AI assistant is temporarily unavailable",
-        )
-
-@app.get("/chat/history")
-async def get_chat_history(
-    current_user: dict = Depends(get_current_user),
-):
-    email_key = current_user["email"].strip().lower()
-
-    try:
-        saved_messages = list(
-            chat_collection.find(
-                {
-                    "email": email_key,
-                    "role": {"$in": ["user", "assistant"]},
-                }
-            )
-            .sort("_id", -1)
-            .limit(100)
-        )
-
-        saved_messages.reverse()
-
-        return {
-            "messages": [
-                {
-                    "role": item["role"],
-                    "text": item["content"],
-                }
-                for item in saved_messages
-                if isinstance(item.get("content"), str)
-            ]
-        }
-
-    except PyMongoError:
-        import logging
-        logging.exception("Could not load LifeMirror chat history")
-        raise HTTPException(
-            status_code=500,
-            detail="Could not load chat history",
-        )
-
-
+        ) from exc
 
 # ---------------- RECOMMENDATIONS ----------------
 @app.get("/recommendations/{email}")
