@@ -144,6 +144,10 @@ class JournalCreate(BaseModel):
     email: str
     text: str
 
+class MemoryCreate(BaseModel):
+    content: str
+    category: str = "preference"
+
 
 class JournalUpdate(BaseModel):
     text: str
