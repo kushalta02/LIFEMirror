@@ -13,7 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from services.preprocessing import preprocess_journal
 from bson import ObjectId
+from pymongo.errors import PyMongoError
 # from textblob import TextBlob
+from services.memory_service import extract_memory_suggestions
 
 from database import (
     client,
@@ -25,6 +27,7 @@ from database import (
     chat_collection,
     conversations_collection,
     memory_collection,
+    memory_suggestions_collection,
 )
 
 from services.ai_service_chat import generate_response
@@ -767,6 +770,101 @@ async def get_chat_history(
             detail="Could not load chat history",
         ) from exc
 
+@app.post("/memory")
+def create_memory(
+    data: MemoryCreate,
+    current_user: dict = Depends(get_current_user),
+):
+    content = data.content.strip()
+    category = data.category.strip().lower()
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="Memory content cannot be empty",
+        )
+
+    if len(content) > 1000:
+        raise HTTPException(
+            status_code=400,
+            detail="Memory must be under 1000 characters",
+        )
+
+    allowed_categories = {
+        "preference",
+        "goal",
+        "important_context",
+        "boundary",
+    }
+
+    if category not in allowed_categories:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid memory category",
+        )
+
+    memory = {
+        "email": current_user["email"],
+        "content": content,
+        "category": category,
+        "created_at": datetime.now(timezone.utc),
+    }
+
+    result = memory_collection.insert_one(memory)
+
+    return {
+        "message": "Memory saved successfully",
+        "memory": {
+            "id": str(result.inserted_id),
+            "content": content,
+            "category": category,
+        },
+    }
+
+
+@app.get("/memory")
+def get_memories(
+    current_user: dict = Depends(get_current_user),
+):
+    memories = memory_collection.find(
+        {"email": current_user["email"]}
+    ).sort("created_at", -1)
+
+    return [
+        {
+            "id": str(memory["_id"]),
+            "content": memory["content"],
+            "category": memory["category"],
+            "created_at": memory["created_at"].isoformat(),
+        }
+        for memory in memories
+    ]
+
+
+@app.delete("/memory/{memory_id}")
+def delete_memory(
+    memory_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    if not ObjectId.is_valid(memory_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid memory ID",
+        )
+
+    result = memory_collection.delete_one({
+        "_id": ObjectId(memory_id),
+        "email": current_user["email"],
+    })
+
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Memory not found",
+        )
+
+    return {"message": "Memory deleted successfully"}
+
 
 @app.post("/chat")
 async def chat(
@@ -817,12 +915,23 @@ async def chat(
             if isinstance(item.get("content"), str)
         ]
 
-        reply = generate_response(
-            message=message,
-            mood=data.mood,
-            history=history,
-            user_name=current_user.get("name") or None,
+        saved_memories = memory_collection.find(
+                {"email": current_user["email"]},
+                {"content": 1, "category": 1, "_id": 0},
+            ).sort("created_at", -1).limit(15)
+
+        memory_context = "\n".join(
+                f"- [{memory['category']}] {memory['content']}"
+                for memory in saved_memories
         )
+
+        reply = generate_response(
+        message=message,
+        mood=data.mood,
+        history=history,
+        user_name=current_user.get("name") or None,
+        memory_context=memory_context,
+)
 
         now = datetime.now(timezone.utc)
 
