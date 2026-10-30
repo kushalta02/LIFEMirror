@@ -866,6 +866,7 @@ def delete_memory(
     return {"message": "Memory deleted successfully"}
 
 
+
 @app.post("/chat")
 async def chat(
     data: ChatRequest,
@@ -895,7 +896,6 @@ async def chat(
                     detail="Conversation not found",
                 )
         else:
-            # Backward compatibility until the frontend sends conversation_id.
             conversation = get_latest_conversation(email_key)
 
         conversation_id = conversation["conversation_id"]
@@ -916,22 +916,22 @@ async def chat(
         ]
 
         saved_memories = memory_collection.find(
-                {"email": current_user["email"]},
-                {"content": 1, "category": 1, "_id": 0},
-            ).sort("created_at", -1).limit(15)
+            {"email": email_key},
+            {"content": 1, "category": 1, "_id": 0},
+        ).sort("created_at", -1).limit(15)
 
         memory_context = "\n".join(
-                f"- [{memory['category']}] {memory['content']}"
-                for memory in saved_memories
+            f"- [{memory['category']}] {memory['content']}"
+            for memory in saved_memories
         )
 
         reply = generate_response(
-        message=message,
-        mood=data.mood,
-        history=history,
-        user_name=current_user.get("name") or None,
-        memory_context=memory_context,
-)
+            message=message,
+            mood=data.mood,
+            history=history,
+            user_name=current_user.get("name") or None,
+            memory_context=memory_context,
+        )
 
         now = datetime.now(timezone.utc)
 
@@ -968,6 +968,34 @@ async def chat(
                 }
             },
         )
+
+        # Automatic memory extraction (best effort)
+        try:
+            suggestions = extract_memory_suggestions(message)
+
+            for suggestion in suggestions:
+                content = suggestion["content"]
+                category = suggestion["category"]
+
+                # Avoid duplicate pending suggestions
+                existing = memory_suggestions_collection.find_one({
+                    "email": email_key,
+                    "content": content,
+                    "status": "pending",
+                })
+
+                if not existing:
+                    memory_suggestions_collection.insert_one({
+                        "email": email_key,
+                        "content": content,
+                        "category": category,
+                        "status": "pending",
+                        "created_at": now,
+                    })
+
+        except Exception:
+            import logging
+            logging.exception("Automatic memory extraction failed")
 
         return {
             "reply": reply,
@@ -1043,6 +1071,25 @@ async def get_recommendations(email: str):
         "recommendations": list(dict.fromkeys(recommendations))
     }
 
+@app.get("/memory/suggestions")
+async def get_memory_suggestions(
+    current_user: dict = Depends(get_current_user),
+):
+    email_key = current_user["email"].strip().lower()
+
+    suggestions = list(
+        memory_suggestions_collection.find(
+            {
+                "email": email_key,
+                "status": "pending",
+            }
+        ).sort("created_at", -1)
+    )
+
+    for item in suggestions:
+        item["_id"] = str(item["_id"])
+
+    return {"suggestions": suggestions}
 
 # ---------------- DELETE PERSONALITY ----------------
 @app.delete("/delete_personality/{email}")
@@ -1050,6 +1097,77 @@ async def delete_personality(email: str):
     result = personality_collection.delete_one(
         {"email": email}
     )
+@app.post("/memory/suggestions/{suggestion_id}/approve")
+async def approve_memory_suggestion(
+    suggestion_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    email_key = current_user["email"].strip().lower()
+
+    if not ObjectId.is_valid(suggestion_id):
+        raise HTTPException(status_code=400, detail="Invalid suggestion ID")
+
+    suggestion = memory_suggestions_collection.find_one({
+        "_id": ObjectId(suggestion_id),
+        "email": email_key,
+        "status": "pending",
+    })
+
+    if not suggestion:
+        raise HTTPException(
+            status_code=404,
+            detail="Pending suggestion not found",
+        )
+
+    # Avoid adding duplicate permanent memories
+    existing = memory_collection.find_one({
+        "email": email_key,
+        "content": suggestion["content"],
+    })
+
+    if not existing:
+        memory_collection.insert_one({
+            "email": email_key,
+            "content": suggestion["content"],
+            "category": suggestion["category"],
+            "created_at": datetime.now(timezone.utc),
+        })
+
+    memory_suggestions_collection.update_one(
+        {"_id": suggestion["_id"], "email": email_key},
+        {"$set": {"status": "approved"}},
+    )
+
+    return {"message": "Memory approved successfully"}
+
+
+@app.post("/memory/suggestions/{suggestion_id}/reject")
+async def reject_memory_suggestion(
+    suggestion_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    email_key = current_user["email"].strip().lower()
+
+    if not ObjectId.is_valid(suggestion_id):
+        raise HTTPException(status_code=400, detail="Invalid suggestion ID")
+
+    result = memory_suggestions_collection.update_one(
+        {
+            "_id": ObjectId(suggestion_id),
+            "email": email_key,
+            "status": "pending",
+        },
+        {"$set": {"status": "rejected"}},
+    )
+
+    if result.modified_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Pending suggestion not found",
+        )
+
+    return {"message": "Memory suggestion rejected"}
+
 
     if result.deleted_count == 0:
         raise HTTPException(
