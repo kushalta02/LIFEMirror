@@ -1091,12 +1091,6 @@ async def get_memory_suggestions(
 
     return {"suggestions": suggestions}
 
-# ---------------- DELETE PERSONALITY ----------------
-@app.delete("/delete_personality/{email}")
-async def delete_personality(email: str):
-    result = personality_collection.delete_one(
-        {"email": email}
-    )
 @app.post("/memory/suggestions/{suggestion_id}/approve")
 async def approve_memory_suggestion(
     suggestion_id: str,
@@ -1168,6 +1162,12 @@ async def reject_memory_suggestion(
 
     return {"message": "Memory suggestion rejected"}
 
+# ---------------- DELETE PERSONALITY ----------------
+@app.delete("/delete_personality/{email}")
+async def delete_personality(email: str):
+    result = personality_collection.delete_one(
+        {"email": email}
+    )
 
     if result.deleted_count == 0:
         raise HTTPException(
