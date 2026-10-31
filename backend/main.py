@@ -522,6 +522,7 @@ async def get_ai_traits(email: str):
     return {"traits": infer_traits(email)}
 
 
+
 # ---------------- DASHBOARD ----------------
 @app.get("/dashboard/{email}")
 async def get_dashboard(
@@ -536,6 +537,24 @@ async def get_dashboard(
 
     entries = get_journals(current_user["email"])
 
+    # Return actual journal objects, not only mood scores.
+    history = []
+
+    for entry in entries:
+        timestamp = entry.get("timestamp")
+
+        history.append({
+            "id": str(entry.get("_id", "")),
+            "text": entry.get("text", ""),
+            "mood": entry.get("mood", "Unknown"),
+            "timestamp": (
+                timestamp.isoformat()
+                if hasattr(timestamp, "isoformat")
+                else timestamp
+            ),
+            "ai_analysis": entry.get("ai_analysis", {}),
+        })
+
     if not entries:
         return {
             "mood": "No data",
@@ -543,23 +562,13 @@ async def get_dashboard(
             "prediction": "Write journals",
             "productivity": "No data",
             "history": [],
+            "journals": [],
             "traits": [],
         }
 
     latest = entries[-1].get("mood", "Neutral 😐")
 
-    mood_map = {
-        "Negative 😔": -1,
-        "Neutral 😐": 0,
-        "Positive 😊": 1,
-    }
-
-    history = [
-        mood_map.get(entry.get("mood"), 0)
-        for entry in entries
-    ]
-
-    traits = infer_traits(email)
+    traits = infer_traits(current_user["email"])
 
     if "Introvert" in traits and "Extrovert" not in traits:
         personality = "Introvert"
@@ -583,8 +592,10 @@ async def get_dashboard(
         "prediction": prediction,
         "productivity": f"{len(entries)} entries",
         "history": history,
+        "journals": history,
         "traits": traits,
     }
+
 
 
 
