@@ -490,7 +490,31 @@ export default function Chatbox() {
       headers: authHeaders(),
     });
     const data = await readResponse(response, "Could not load conversations");
-    const items = Array.isArray(data.conversations) ? data.conversations : [];
+    const allItems = Array.isArray(data.conversations) ? data.conversations : [];
+
+    // History should contain only chats where the user has actually talked.
+    // Empty conversations from older versions are deliberately hidden.
+    const checkedItems = await Promise.all(
+      allItems.map(async (item) => {
+        try {
+          const historyResponse = await fetch(
+            `${API_URL}/chat/history?conversation_id=${encodeURIComponent(item.conversation_id)}`,
+            { headers: authHeaders() }
+          );
+          const historyData = await readResponse(historyResponse, "Could not check conversation");
+          const hasMessages = Array.isArray(historyData.messages) && historyData.messages.some(
+            (message) => message &&
+              (message.role === "user" || message.role === "assistant") &&
+              typeof message.text === "string" && message.text.trim()
+          );
+          return hasMessages ? item : null;
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    const items = checkedItems.filter(Boolean);
     setConversations(items);
     return items;
   }
@@ -540,13 +564,10 @@ export default function Chatbox() {
       throw new Error("LifeMirror couldn't create a conversation. Please try again.");
     }
     conversationRef.current = data.conversation_id;
-    setMessages([]);
-    setInput("");
-    setError("");
-    setConversations((previous) => [
-      data,
-      ...previous.filter((item) => item.conversation_id !== data.conversation_id),
-    ]);
+    // Keep the optimistic first message in the UI; this function is called
+    // from sendMessage when a fresh chat receives its first message.
+    // Do not add an empty conversation to history. It becomes visible
+    // only after the first message has been successfully saved.
     return data.conversation_id;
   }
 
@@ -558,25 +579,27 @@ export default function Chatbox() {
     let cancelled = false;
 
     async function initialiseChat() {
+      // Every time the AI Companion page opens, start with the welcome screen.
+      // Previous chats stay in the sidebar and are opened only when selected.
+      conversationRef.current = null;
+      setMessages([]);
+      setInput("");
+      setError("");
+
       if (!token) {
         setError("Your session has expired. Please log in again.");
         setHistoryLoading(false);
         return;
       }
+
       try {
-        const items = await fetchConversationList();
-        if (cancelled) return;
-        if (items.length > 0) {
-          await loadConversation(items[0].conversation_id);
-        } else {
-          await createConversation();
-          if (!cancelled) setHistoryLoading(false);
-        }
+        await fetchConversationList();
       } catch (err) {
         if (!cancelled) {
-          setError(err.message || "Could not open LifeMirror chat.");
-          setHistoryLoading(false);
+          setError(err.message || "Could not load conversation history.");
         }
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
       }
     }
 
@@ -679,17 +702,14 @@ export default function Chatbox() {
 
   async function startFreshConversation() {
     if (loadingRef.current) return;
-    setHistoryOpen(false);
+    // A fresh chat is only a clean local screen. The database conversation
+    // is created lazily when the user sends their first message.
+    conversationRef.current = null;
+    setMessages([]);
+    setInput("");
     setError("");
-    setHistoryLoading(true);
-    try {
-      await createConversation();
-    } catch (err) {
-      setError(err.message || "Could not start a new conversation.");
-    } finally {
-      setHistoryLoading(false);
-      inputRef.current?.focus();
-    }
+    setHistoryOpen(false);
+    inputRef.current?.focus();
   }
 
   function getConversationGroups(items) {
