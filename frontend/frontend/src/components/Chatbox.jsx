@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API_URL = (import.meta.env.VITE_API_URL || "https://lifemirror-backend.onrender.com").replace(/\/$/, "");
 
 const starters = [
   { icon: "♡", title: "I need to let it out", caption: "Something has been weighing on me", text: "I have something on my mind that I'd like to share." },

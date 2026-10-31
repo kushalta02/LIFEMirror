@@ -36,7 +36,7 @@ export default function Personality() {
   useEffect(() => {
 
     fetch(
-      `http://127.0.0.1:8000/get_personality/${user.email}`
+      `https://lifemirror-backend.onrender.com/get_personality/${user.email}`
     )
       .then((res) => res.json())
       .then((data) => {
@@ -50,7 +50,7 @@ export default function Personality() {
       });
 
     fetch(
-      `http://127.0.0.1:8000/get_ai_traits/${user.email}`
+      `https://lifemirror-backend.onrender.com/get_ai_traits/${user.email}`
     )
       .then((res) => res.json())
       .then((data) =>
@@ -76,7 +76,7 @@ export default function Personality() {
     setSaving(true);
 
     await fetch(
-      "http://127.0.0.1:8000/save_personality",
+      "https://lifemirror-backend.onrender.com/save_personality",
       {
         method: "POST",
         headers: {

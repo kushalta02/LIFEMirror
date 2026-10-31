@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { logout, useSessionTimeout } from "../utils";
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API_URL = (import.meta.env.VITE_API_URL || "https://lifemirror-backend.onrender.com").replace(/\/$/, "");
 
 function getId(item) {
   return String(item?.id || item?._id || item?.memory_id || "");

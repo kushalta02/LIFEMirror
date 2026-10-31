@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 const API_URL = (
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
+  import.meta.env.VITE_API_URL || "https://lifemirror-backend.onrender.com"
 ).replace(/\/$/, "");
 
 const signupStyles = `

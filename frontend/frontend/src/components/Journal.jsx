@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const API_URL = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+const API_URL = (import.meta.env.VITE_API_URL || "https://lifemirror-backend.onrender.com").replace(/\/$/, "");
 const PROMPTS = [
   "What felt important today?",
   "What is taking up space in my mind?",

@@ -11,7 +11,7 @@ export default function Recommendations() {
   useEffect(() => {
 
     fetch(
-      `http://127.0.0.1:8000/recommendations/${user.email}`
+      `https://lifemirror-backend.onrender.com/recommendations/${user.email}`
     )
       .then((res) => res.json())
       .then((data) => {
