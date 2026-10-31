@@ -11,7 +11,7 @@ const meta = {
   unknown: { label: "Unclassified", emoji: "✧", color: "#9ba8ad" },
 };
 const groups = [
-  ["YOUR SPACE", [["Overview","⌂","overview"],["Mood timeline","◷","timeline"],["Journal memories","▤","journal"],["AI reflections","✧","insights"]]],
+  ["YOUR SPACE", [["Overview","⌂","overview"],["Mood timeline","◷","timeline"],["Journal memories","▤","journal"],["Saved memories","♡","memories"],["AI reflections","✧","insights"]]],
   ["UNDERSTAND YOURSELF", [["Emotion patterns","◉","patterns"],["Personality map","◎","personality"],["Growth goals","↗","goals"]]],
   ["YOUR ECOSYSTEM", [["AI companion","✳","chat"],["Camera mood","◌","camera"],["Health connections","⌁","connections"]]],
 ];
@@ -36,7 +36,8 @@ export default function Dashboard() {
   useSessionTimeout();
   const navigate=useNavigate();
   const [data,setData]=useState(null), [loading,setLoading]=useState(true), [error,setError]=useState("");
-  const [range,setRange]=useState("7D"), [active,setActive]=useState("overview"), [checks,setChecks]=useState([false,false,false]);
+  const [savedMemories,setSavedMemories]=useState([]), [memorySuggestions,setMemorySuggestions]=useState([]), [memoryLoading,setMemoryLoading]=useState(true), [memoryBusy,setMemoryBusy]=useState("");
+  const [range,setRange]=useState("7D"), [active,setActive]=useState("overview"), [checks,setChecks]=useState(()=>{try{return JSON.parse(localStorage.getItem(`lm_goals_${JSON.parse(localStorage.getItem("user")||"{}").email||"guest"}`))||[false,false,false]}catch{return [false,false,false]}});
   const [prompt,setPrompt]=useState("What has been taking up the most space in my mind lately?");
   const [modal,setModal]=useState(false), [toast,setToast]=useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -48,6 +49,45 @@ export default function Dashboard() {
   const user=useMemo(()=>{try{return JSON.parse(localStorage.getItem("user")||"{}")}catch{return{}}},[]);
   const token=sessionStorage.getItem("access_token"), name=user.name||user.full_name||"there";
   useEffect(()=>{let alive=true;(async()=>{if(!user.email){setError("Session details are missing. Please sign in again.");setLoading(false);return;}try{const r=await fetch(`${API_URL}/dashboard/${encodeURIComponent(user.email)}`,{headers:token?{Authorization:`Bearer ${token}`}:{}});if(r.status===401||r.status===403){logout();navigate("/",{replace:true});return;}if(!r.ok)throw new Error(`Dashboard request failed (${r.status}).`);const j=await r.json();if(alive)setData(j);}catch(e){if(alive)setError(e.message||"Could not reach the backend.");}finally{if(alive)setLoading(false)}})();return()=>{alive=false}},[navigate,user.email,token]);
+  useEffect(()=>{
+    try{localStorage.setItem(`lm_goals_${user.email||"guest"}`,JSON.stringify(checks));}catch{}
+  },[checks,user.email]);
+  useEffect(()=>{
+    let alive=true;
+    const loadMemories=async()=>{
+      setMemoryLoading(true);
+      try{
+        const headers=token?{Authorization:`Bearer ${token}`} : {};
+        const [savedRes,suggestRes]=await Promise.all([
+          fetch(`${API_URL}/memory`,{headers}),
+          fetch(`${API_URL}/memory/suggestions`,{headers})
+        ]);
+        if(savedRes.status===401||suggestRes.status===401){logout();navigate("/",{replace:true});return;}
+        const savedJson=savedRes.ok?await savedRes.json():[];
+        const suggestJson=suggestRes.ok?await suggestRes.json():[];
+        const saved=Array.isArray(savedJson)?savedJson:(savedJson.memories||savedJson.items||[]);
+        const suggestions=Array.isArray(suggestJson)?suggestJson:(suggestJson.suggestions||suggestJson.items||[]);
+        if(alive){setSavedMemories(saved);setMemorySuggestions(suggestions);}
+      }catch{if(alive){setSavedMemories([]);setMemorySuggestions([]);}}
+      finally{if(alive)setMemoryLoading(false);}
+    };
+    if(token)loadMemories();else setMemoryLoading(false);
+    return()=>{alive=false};
+  },[navigate,token]);
+  const handleMemoryAction=async(id,action)=>{
+    if(!id)return;
+    setMemoryBusy(`${id}-${action}`);
+    try{
+      const endpoint=action==="approve"?`${API_URL}/memory/suggestions/${id}/approve`:action==="reject"?`${API_URL}/memory/suggestions/${id}/reject`:`${API_URL}/memory/${id}`;
+      const response=await fetch(endpoint,{method:action==="delete"?"DELETE":"POST",headers:token?{Authorization:`Bearer ${token}`}:{}});
+      if(!response.ok)throw new Error(`Action failed (${response.status})`);
+      if(action==="approve"){setMemorySuggestions(old=>old.filter(x=>(x.id||x._id)!==id));const r=await fetch(`${API_URL}/memory`,{headers:token?{Authorization:`Bearer ${token}`}:{}});const j=r.ok?await r.json():[];setSavedMemories(Array.isArray(j)?j:(j.memories||j.items||[]));}
+      if(action==="reject")setMemorySuggestions(old=>old.filter(x=>(x.id||x._id)!==id));
+      if(action==="delete")setSavedMemories(old=>old.filter(x=>(x.id||x._id)!==id));
+      notify(action==="approve"?"Memory saved to your personal context.":action==="reject"?"Suggestion dismissed.":"Memory deleted.");
+    }catch(e){notify(e.message||"Could not update memory.");}
+    finally{setMemoryBusy("");}
+  };
   useEffect(() => {
     const nodes = document.querySelectorAll(".hero, .insight-path, .path-step, .metric-grid, .section, .lm-footer");
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -95,7 +135,7 @@ export default function Dashboard() {
   const insight=data?.ai_insight||data?.insight||data?.reflection||data?.prediction;
   const done=checks.filter(Boolean).length;
   const notify=t=>{setToast(t);window.setTimeout(()=>setToast(""),3600)};
-  const jump=id=>{setActive(id);setMobileSidebarOpen(false);const el=document.getElementById(`lm-${id}`);if(el)el.scrollIntoView({behavior:"smooth",block:"start"});else if(id==="connections")setModal(true);else if(id==="camera")notify("Camera Mood is a planned feature and is not connected yet.");else if(["journal","chat","personality","recommendations"].includes(id))navigate({journal:"/journal",chat:"/chat",personality:"/personality",recommendations:"/recommendations"}[id]);};
+  const jump=id=>{setActive(id);setMobileSidebarOpen(false);const el=document.getElementById(`lm-${id}`);if(el)el.scrollIntoView({behavior:"smooth",block:"start"});else if(id==="connections")setModal(true);else if(id==="camera")notify("Camera Mood is a planned feature and is not connected yet.");else if(["journal","chat","personality","recommendations","memories"].includes(id))navigate({journal:"/journal",chat:"/chat",personality:"/personality",recommendations:"/recommendations",memories:"/memories"}[id]);};
   const goChat=()=>navigate("/chat",{state:{prompt}});
   return <div className={`lm-app ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileSidebarOpen ? "mobile-nav-open" : ""}`}>
     <style>{styles}</style>
@@ -173,6 +213,8 @@ export default function Dashboard() {
       <section className="section" id="lm-patterns"><Heading eyebrow="CONNECT THE DOTS" title="Patterns worth noticing" desc="A starting point for self-awareness, based only on data available so far."/><div className="three-col"><article className="panel pattern"><i className="mint">↗</i><small>MOOD SIGNAL</small><h3>{count?`${meta[top].label} appears most often`:"Your mood story is waiting"}</h3><p>{count?`${counts[top]} of ${count} labelled entries fall into this broad category. One mood does not define your whole experience.`:"Add entries across different days to begin seeing your emotional rhythm."}</p><footer>{count?"Calculated from saved entries":"Needs journal data"}</footer></article><article className="panel pattern"><i className="lav">⌁</i><small>RECURRING THEMES</small><h3>What keeps coming back?</h3><p>When journal analysis captures repeated topics, compare themes over time instead of relying on one difficult or great day.</p><button className="text-link" onClick={()=>navigate("/journal")}>Review journal history →</button></article><article className="panel pattern"><i className="rose">♡</i><small>TRIGGERS & SUPPORTS</small><h3>What shifts how you feel?</h3><p>Notice people, routines, rest, or responsibilities around different moods. These are clues to explore, not proof of cause.</p><button className="text-link" onClick={()=>navigate("/chat")}>Explore with AI →</button></article></div></section>
 
       <section className="section" id="lm-goals"><Heading eyebrow="SMALL STEPS, REAL LIFE" title="Your gentle growth plan" desc="No streak pressure. Pick tiny actions that feel realistic today." action={<span className="pill">{done} of 3 checked</span>}/><div className="two-col goals"><article className="panel goal-panel"><div className="goal-header"><div><small>YOUR DAILY CHECKLIST</small><h3>Make space for yourself</h3></div><div className="goal-ring" style={{"--progress":`${done/3*100}%`}}><b>{Math.round(done/3*100)}%</b></div></div>{[["Take a 2-minute pause","Breathe slowly, unclench your jaw, and notice your surroundings."],["Write one honest paragraph","It doesn't have to sound good. It only has to be yours."],["Name one thing you need","Rest, clarity, support, movement, or simply a little time."]].map(([t,d],i)=><label key={t} className={`goal-row ${checks[i]?"done":""}`}><input type="checkbox" checked={checks[i]} onChange={e=>setChecks(old=>old.map((v,j)=>i===j?e.target.checked:v))}/><span className="check">{checks[i]?"✓":""}</span><span><b>{t}</b><small>{d}</small></span><i>↗</i></label>)}</article><article className="breathing"><div className="breathing-top"><span>PAUSE CORNER</span><b>02:00</b></div><div className="breath-circle"><div><small>BREATHE</small><b>in · out</b></div></div><h3>Come back to this moment.</h3><p>Let your shoulders soften. Feel your feet on the floor. You only need to be here for one breath at a time.</p><button onClick={()=>notify("Try a gentle 4-count inhale and 6-count exhale for a few rounds. This is a grounding suggestion, not a timer.")}>Start a mindful pause →</button></article></div></section>
+
+      <section className="section" id="lm-memories"><Heading eyebrow="WHAT YOUR COMPANION REMEMBERS" title="Your saved memories" desc="Keep useful context, preferences, and goals that help LifeMirror understand you over time." action={<button className="text-link" onClick={()=>navigate("/memories")}>Manage all memories ↗</button>}/><div className="lm-memory-grid"><article className="panel lm-memory-panel"><div className="panel-title"><div><h3>Saved for later</h3><p>Approved memories used as context by your companion.</p></div><i>♡</i></div>{memoryLoading?<p className="lm-memory-muted">Loading your memories…</p>:savedMemories.length?savedMemories.slice(0,4).map((m,i)=>{const id=String(m.id||m._id||i),content=m.content||m.text||m.memory||m.value||"Saved memory",category=m.category||"personal context";return <div className="lm-memory-row" key={id}><div><small>{String(category).replaceAll("_"," ")}</small><p>{content}</p></div><button disabled={!!memoryBusy} onClick={()=>handleMemoryAction(id,"delete")}>Delete</button></div>}):<div className="lm-memory-empty"><b>No saved memories yet</b><p>When LifeMirror suggests something useful, approve it here or in your Memories page.</p></div>}</article><article className="panel lm-memory-panel"><div className="panel-title"><div><h3>Needs your approval</h3><p>Nothing is saved until you approve a suggestion.</p></div><i>✧</i></div>{memoryLoading?<p className="lm-memory-muted">Checking suggestions…</p>:memorySuggestions.length?memorySuggestions.slice(0,3).map((m,i)=>{const id=String(m.id||m._id||i),content=m.content||m.text||m.memory||m.value||"Memory suggestion",category=m.category||"personal context";return <div className="lm-memory-row suggestion" key={id}><div><small>{String(category).replaceAll("_"," ")}</small><p>{content}</p></div><div className="lm-memory-actions"><button disabled={!!memoryBusy} onClick={()=>handleMemoryAction(id,"approve")}>Approve</button><button disabled={!!memoryBusy} onClick={()=>handleMemoryAction(id,"reject")}>Dismiss</button></div></div>}):<div className="lm-memory-empty"><b>Nothing waiting for you</b><p>As you chat, your companion may suggest useful details to remember. You stay in control.</p></div>}</article></div></section>
 
       <section className="section" id="lm-journal"><Heading eyebrow="YOUR LIFE, IN YOUR WORDS" title="Recent journal memories" desc="Your latest saved reflections, all in one place." action={<button className="text-link" onClick={()=>navigate("/journal")}>Open journal archive ↗</button>}/><div className="recent-list">{sorted.slice(0,4).length?sorted.slice(0,4).map((e,i)=>{const k=mood(e),d=getDate(e),txt=e.text||e.content||e.entry||"Journal entry";return <article className="recent" key={e._id||e.id||i}><div className={`recent-emoji ${k}`}>{meta[k].emoji}</div><div><small>{d?d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}):"Saved reflection"}　·　{meta[k].label}</small><p>{String(txt).slice(0,190)}{String(txt).length>190?"…":""}</p></div><button onClick={()=>navigate("/journal")}>↗</button></article>}):<div className="journal-empty"><div className="lm-empty-icon">▤</div><div><h3>Your first memory can start small.</h3><p>Capture what happened, how it felt, or one thing you want to remember.</p><button className="primary" onClick={()=>navigate("/journal")}>Write your first entry →</button></div></div>}</div></section>
 
@@ -667,4 +709,6 @@ body{background:#f5f3fb!important}.lm-app{--sidebar-width:248px;position:relativ
 @media(max-width:900px){.lm-app{--sidebar-width:76px}.lm-sidebar{padding:64px 9px 18px!important}.lm-brand{justify-content:center;padding:0 0 24px!important}.lm-brand>span:last-child,.lm-profile>div:nth-child(2),.lm-profile>i,.nav-title,.nav-item em,.sidebar-bottom{display:none!important}.lm-profile{justify-content:center;padding:8px 0!important;border:0!important;background:none!important;margin-bottom:20px!important}.nav-item{justify-content:center;padding:13px 0!important;font-size:0!important}.nav-item>span{font-size:19px!important;width:100%!important}.lm-sidebar-toggle{right:25px;top:19px}.lm-brand .brand-mark{margin:0}}
 @media(max-width:760px){.lm-app{--sidebar-width:270px}.lm-sidebar{position:fixed!important;left:0;top:0;bottom:0;height:100dvh!important;width:270px!important;flex-basis:270px!important;transform:translateX(-105%);padding:28px 15px 18px!important;z-index:140!important;box-shadow:20px 0 65px #20163f35!important}.lm-app.mobile-nav-open .lm-sidebar{transform:translateX(0)}.lm-app.mobile-nav-open .lm-sidebar .lm-brand{justify-content:flex-start;padding:0 32px 26px 8px!important}.lm-app.mobile-nav-open .lm-sidebar .lm-brand>span:last-child,.lm-app.mobile-nav-open .lm-sidebar .lm-profile>div:nth-child(2),.lm-app.mobile-nav-open .lm-sidebar .lm-profile>i,.lm-app.mobile-nav-open .lm-sidebar .nav-title,.lm-app.mobile-nav-open .lm-sidebar .nav-item em,.lm-app.mobile-nav-open .lm-sidebar .sidebar-bottom{display:initial!important}.lm-app.mobile-nav-open .lm-sidebar .sidebar-bottom{display:block!important}.lm-app.mobile-nav-open .lm-sidebar .lm-profile{justify-content:flex-start;padding:12px 10px!important;border:1px solid #ffffff13!important;background:#ffffff0c!important;margin-bottom:26px!important}.lm-app.mobile-nav-open .lm-sidebar .nav-item{justify-content:flex-start;padding:11px 10px!important;font-size:12px!important}.lm-app.mobile-nav-open .lm-sidebar .nav-item>span{width:19px!important;font-size:16px!important}.lm-app.mobile-nav-open .lm-sidebar .lm-sidebar-toggle{right:10px;top:20px}.lm-sidebar-scrim{display:block;position:fixed;inset:0;z-index:130;border:0!important;background:#17132d70!important;backdrop-filter:blur(5px)}.lm-menu-toggle{flex:0 0 36px}.lm-topbar{padding:0 14px!important}.lm-topbar-left{gap:9px}.lm-topbar>div{gap:8px}.lm-travel-seed{right:12px;width:28px;height:28px;opacity:.72}.lm-scroll-compass{display:none}.lm-app.sidebar-collapsed{--sidebar-width:270px}}
 @media(prefers-reduced-motion:reduce){.lm-travel-seed,.lm-travel-seed:before,.lm-travel-seed:after,.metric,.path-node,.path-track-fill,.hero-art .spark,.insight-path:after{animation:none!important;transition:none!important}.lm-travel-seed{top:20px!important;transform:none!important}}
+
+.lm-memory-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.lm-memory-panel{min-width:0}.lm-memory-muted,.lm-memory-empty p{font-size:10px;line-height:1.8;color:#87949a}.lm-memory-empty{padding:16px 2px}.lm-memory-empty b{font:700 12px Manrope;color:#dce6e2}.lm-memory-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:13px 0;border-top:1px solid var(--line)}.lm-memory-row>div:first-child{min-width:0;flex:1}.lm-memory-row small{font-size:8px;letter-spacing:1px;text-transform:uppercase;color:var(--mint)}.lm-memory-row p{font-size:10px;line-height:1.7;color:#c1ccca;margin:6px 0 0;overflow-wrap:anywhere}.lm-memory-row button{flex:0 0 auto;border:1px solid #78e4bb36;border-radius:8px;padding:7px 9px;background:#78e4bb10;color:var(--mint);font-size:9px}.lm-memory-actions{display:flex;gap:6px}.lm-memory-actions button:last-child{border-color:#ff9eac40;background:#ff9eac0c;color:#ffb1ba}.lm-memory-row button:disabled{opacity:.45;cursor:wait}@media(max-width:760px){.lm-memory-grid{grid-template-columns:1fr}}
 `

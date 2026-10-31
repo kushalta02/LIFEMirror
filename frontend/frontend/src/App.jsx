@@ -6,7 +6,7 @@ import Journal from "./components/Journal";
 import Chatbox from "./components/Chatbox";
 import Personality from "./components/Personality";
 import Recommendations from "./components/Recommendations";
-
+import Memories from "./components/Memories";
 function App() {
   return (
     <BrowserRouter>
@@ -18,6 +18,7 @@ function App() {
         <Route path="/chat" element={<Chatbox />} />
         <Route path="/personality" element={<Personality />} />
         <Route path="/recommendations" element={<Recommendations />} />
+        <Route path="/memories" element={<Memories />} />
       </Routes>
     </BrowserRouter>
   );

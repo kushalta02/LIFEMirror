@@ -597,11 +597,6 @@ async def get_dashboard(
     }
 
 
-
-
-
-
-
 # ---------------- CHAT & CONVERSATIONS ----------------
 
 MAX_CHAT_HISTORY = 12
